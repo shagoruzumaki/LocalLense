@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:local_lense/screen/ForgotPassword_page.dart';
 import 'package:local_lense/screen/ResetPassword_page.dart';
+import 'package:local_lense/screen/discover_page.dart';
 import 'package:local_lense/screen/home_page.dart';
 import 'package:local_lense/screen/login_page.dart';
 import 'package:local_lense/screen/profile_page.dart';
@@ -8,6 +9,8 @@ import 'package:local_lense/view/auth_gate.dart';
 import 'screen/screens.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_lense/screen/signup_page.dart';
+import 'package:local_lense/screen/ranking_page.dart';
+import 'package:local_lense/screen/restaurant_details_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +48,10 @@ class MyApp extends StatelessWidget {
          '/register': (_) => const SignupPage(),
          '/forgot-password': (_) => const ForgotPasswordPage(),
          '/reset-password': (_) => const ResetPasswordPage(),
+         '/discover': (_) => const DiscoverPage(),
+         '/profile': (_) => const ProfilePage(),
+         '/ranking': (_) => const RankingPage(),
+         '/resturant-details': (_) => const RestaurantDetailsPage(),
        },
     );
   }
