@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
          '/discover': (_) => const DiscoverPage(),
          '/profile': (_) => const ProfilePage(),
          '/ranking': (_) => const RankingPage(),
-         '/resturant-details': (_) => const RestaurantDetailsPage(),
+         '/restaurant-details': (_) => const RestaurantDetailsPage(),
        },
     );
   }
