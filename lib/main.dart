@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:local_lense/screen/ForgotPassword_page.dart';
+import 'package:local_lense/screen/ResetPassword_page.dart';
+import 'package:local_lense/screen/home_page.dart';
+import 'package:local_lense/screen/login_page.dart';
 import 'package:local_lense/screen/profile_page.dart';
+import 'package:local_lense/view/auth_gate.dart';
 import 'screen/screens.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:local_lense/screen/signup_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +35,17 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const ProfilePage(),
+       home: AuthGate(
+           homeScreen: const HomePage(),
+           loginScreen: const LoginPage(),
+           resetPasswordScreen: const ResetPasswordPage(),
+       ),
+       routes: {
+         '/login': (_) => const LoginPage(),
+         '/register': (_) => const SignupPage(),
+         '/forgot-password': (_) => const ForgotPasswordPage(),
+         '/reset-password': (_) => const ResetPasswordPage(),
+       },
     );
   }
 }

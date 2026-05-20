@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:local_lense/services/auth_services.dart';
+
+
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -9,6 +13,12 @@ class SignupPage extends StatefulWidget {
 
 class _SignupPageState extends State<SignupPage> {
   bool _obscurePassword = true;
+  final supabase = Supabase.instance.client;
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final nameController = TextEditingController();
+  final authService = AuthService();
+
 
   @override
   Widget build(BuildContext context) {
@@ -49,13 +59,17 @@ class _SignupPageState extends State<SignupPage> {
                 style: TextStyle(color: Colors.white70, fontSize: 16),
               ),
               const SizedBox(height: 40),
-              _buildTextField(label: 'Full Name', icon: Icons.person_outline),
+              _buildTextField(label: 'Full Name',
+                  icon: Icons.person_outline,
+                  controller: nameController,
+              ),
               const SizedBox(height: 20),
-              _buildTextField(label: 'Email', icon: Icons.email_outlined),
+              _buildTextField(label: 'Email',controller: emailController, icon: Icons.email_outlined),
               const SizedBox(height: 20),
               _buildTextField(
                 label: 'Password',
                 icon: Icons.lock_outline,
+                controller: passwordController,
                 isPassword: true,
               ),
               const SizedBox(height: 40),
@@ -63,7 +77,24 @@ class _SignupPageState extends State<SignupPage> {
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () async {
+
+                    final result = await authService.register(
+                      name: nameController.text,
+                      email: emailController.text,
+                      password: passwordController.text,
+                    );
+
+                    if (!mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(result.message)),
+                    );
+
+                    if (result.user != null) {
+                      Navigator.pop(context);
+                    }
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFD700),
                     foregroundColor: Colors.black,
@@ -109,9 +140,11 @@ class _SignupPageState extends State<SignupPage> {
   Widget _buildTextField({
     required String label,
     required IconData icon,
+    required TextEditingController controller,
     bool isPassword = false,
   }) {
     return TextField(
+      controller: controller,
       obscureText: isPassword ? _obscurePassword : false,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(

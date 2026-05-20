@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'signup_page.dart';
 import 'home_page.dart';
 import 'landing_page.dart';
+import 'ForgotPassword_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:local_lense/services/auth_services.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -12,6 +15,11 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final supabase = Supabase.instance.client;
+  final authService = AuthService();
+
 
   @override
   Widget build(BuildContext context) {
@@ -53,18 +61,28 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 50),
-              _buildTextField(label: 'Email', icon: Icons.email_outlined),
+              _buildTextField(label: 'Email',
+                  icon: Icons.email_outlined,
+                  controller: emailController,
+              ),
               const SizedBox(height: 20),
               _buildTextField(
                 label: 'Password',
                 icon: Icons.lock_outline,
+                controller: passwordController,
                 isPassword: true,
               ),
               const SizedBox(height: 15),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    print("Button blocked");
+                    Navigator.push(context,
+                      MaterialPageRoute(builder: (context)=> const ForgotPasswordPage()
+                    ),
+                    );
+                  },
                   child: const Text(
                     'Forgot Password?',
                     style: TextStyle(color: Color(0xFFFFD700)),
@@ -76,12 +94,31 @@ class _LoginPageState extends State<LoginPage> {
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomePage()),
-                      (route) => false,
+                  onPressed: () async {
+
+                    final result = await authService.login(
+                      email: emailController.text,
+                      password: passwordController.text,
                     );
+
+                    if (!mounted) return;
+
+                    if (result.user != null) {
+
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const HomePage(),
+                        ),
+                      );
+
+                    } else {
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(result.message)),
+                      );
+
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFD700),
@@ -132,9 +169,11 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildTextField({
     required String label,
     required IconData icon,
+    required TextEditingController controller,
     bool isPassword = false,
   }) {
     return TextField(
+      controller: controller,
       obscureText: isPassword ? _obscurePassword : false,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
