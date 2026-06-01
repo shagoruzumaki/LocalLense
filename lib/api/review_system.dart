@@ -1,10 +1,14 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../algorithm/score.dart'; // 2.1 — RestaurantScoreCalculator
+import '../algorithm/score.dart';   // 2.1 — RestaurantScoreCalculator
+import 'ai_summary.dart';       // 2.3 — AI Summary Engine
+import 'tier_upgrade_api.dart';     // 2.4 — Tier Upgrade Logic
 
 /// 2.2 Review System API
 /// Owner: Kamonashish Dutta Hemel
 /// All review-related operations for LocalLens
-/// Connects to: 2.1 Score Algorithm (ScoreCalculator) after write operations
+/// Connects to: 2.1 Score Algorithm after write operations
+/// Connects to: 2.3 AI Summary Engine after every new review
+/// Connects to: 2.4 Tier Upgrade Logic after every helpful vote
 
 class ReviewApi {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -63,9 +67,15 @@ class ReviewApi {
         .single();
 
     // ── 2.1 SCORE RECALCULATION ───────────────────────────────────────────
-    // Fetch all reviews for this restaurant and recalculate score using
-    // RestaurantScoreCalculator from score.dart (2.1)
+    // Recalculate quality + trust scores using score.dart (2.1)
     await _recalculateScore(restaurantId);
+    // ──────────────────────────────────────────────────────────────────────
+
+    // ── 2.3 AI SUMMARY ENGINE ─────────────────────────────────────────────
+    // Check if summary should regenerate (triggers at 5, 15, 25, 35... reviews)
+    // Runs after score recalc so it doesn't block the review response
+    final aiSummary = AiSummaryApi();
+    await aiSummary.checkAndGenerateSummary(restaurantId);
     // ──────────────────────────────────────────────────────────────────────
 
     return response;
@@ -173,10 +183,11 @@ class ReviewApi {
       'target_user_id': review['user_id'],
     });
 
-    // ── 2.1 HOOK (Tier Upgrade) ────────────────────────────────────────────
-    // TODO (2.1): Call TierUpgradeChecker.checkUpgrade(review['user_id'])
-    // After every vote, check if the reviewer has crossed a tier threshold.
-    // Thresholds: Explorer→Expert: 50 votes, Expert→Diamond: 200, Diamond→Platinum: 500
+    // ── 2.4 TIER UPGRADE CHECK ───────────────────────────────────────────
+    // Check if this vote pushed the reviewer over a tier threshold
+    // Thresholds: Explorer→Expert: 50, Expert→Diamond: 200, Diamond→Platinum: 500
+    final tierUpgrade = TierUpgradeApi();
+    await tierUpgrade.checkUpgrade(review['user_id'] as String);
     // ──────────────────────────────────────────────────────────────────────
   }
 
