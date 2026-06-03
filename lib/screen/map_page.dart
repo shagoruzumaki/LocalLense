@@ -1,9 +1,9 @@
 import 'dart:async';
-import '../services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../services/location_service.dart';
 import '../services/restaurant_service.dart';
 import '../model/restaurant.dart';
 
@@ -18,17 +18,17 @@ class _MapPageState extends State<MapPage> {
   final RestaurantService _restaurantService = RestaurantService();
   final MapController _mapController = MapController();
   final LocationService _locationService = LocationService();
+  StreamSubscription<LatLng>? _locationSubscription;
 
   List<Restaurant> _spots = [];
-  LatLng _userLocation = LatLng(23.8103, 90.4125);
+  LatLng _userLocation = const LatLng(23.8103, 90.4125);
 
   bool _isLoading = true;
-  bool _mapStarted = false;
 
   @override
   void initState() {
     super.initState();
-    _initMap(); // ✅ FIX: NOW IT RUNS
+    _initMap();
   }
 
   // ─────────────────────────────
@@ -44,17 +44,16 @@ class _MapPageState extends State<MapPage> {
       }
 
       // LIVE STREAM
-      _locationService.getLocationStream().listen((newLocation) {
+      _locationSubscription = _locationService.getLocationStream().listen((newLocation) {
         if (!mounted) return;
 
         setState(() {
           _userLocation = newLocation;
         });
 
-        _mapController.move(newLocation, 15.0);
+        // Uncomment if you want the map to follow the user automatically
+        // _mapController.move(newLocation, _mapController.camera.zoom);
       });
-
-      _mapStarted = true;
 
     } catch (e) {
       debugPrint("Location error: $e");
@@ -68,7 +67,10 @@ class _MapPageState extends State<MapPage> {
   // ─────────────────────────────
   Future<void> _fetchSpots() async {
     try {
-      final spots = await _restaurantService.fetchNearbyRestaurants();
+      final spots = await _restaurantService.fetchNearbyRestaurants(
+        latitude: _userLocation.latitude,
+        longitude: _userLocation.longitude,
+      );
 
       if (mounted) {
         setState(() {
@@ -92,17 +94,20 @@ class _MapPageState extends State<MapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
-
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Explore Nearby',
-          style: TextStyle(color: Color(0xFFFFD700)),
+          style: TextStyle(
+            color: Color(0xFFFFD700),
+            fontWeight: FontWeight.bold,
+            fontFamily: 'serif',
+          ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
               setState(() => _isLoading = true);
               _fetchSpots();
@@ -110,7 +115,6 @@ class _MapPageState extends State<MapPage> {
           )
         ],
       ),
-
       body: Stack(
         children: [
           FlutterMap(
@@ -125,7 +129,6 @@ class _MapPageState extends State<MapPage> {
                 subdomains: const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.local_lense.app',
               ),
-
               MarkerLayer(
                 markers: [
                   // USER MARKER
@@ -142,8 +145,7 @@ class _MapPageState extends State<MapPage> {
 
                   // RESTAURANTS
                   ..._spots
-                      .where((r) =>
-                  r.latitude != 0.0 && r.longitude != 0.0)
+                      .where((r) => r.latitude != 0.0 && r.longitude != 0.0)
                       .map((r) {
                     return Marker(
                       point: LatLng(r.latitude, r.longitude),
@@ -163,7 +165,6 @@ class _MapPageState extends State<MapPage> {
               ),
             ],
           ),
-
           if (_isLoading)
             const Center(
               child: CircularProgressIndicator(
@@ -181,30 +182,74 @@ class _MapPageState extends State<MapPage> {
   void _showRestaurantPopup(Restaurant r) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (_) => Container(
-        padding: const EdgeInsets.all(20),
-        color: const Color(0xFF1A1A1A),
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              r.name,
-              style: const TextStyle(color: Colors.white, fontSize: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    r.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'serif',
+                    ),
+                  ),
+                ),
+                Text(
+                  "৳" * r.priceTier,
+                  style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            Text(
+              r.category.toUpperCase(),
+              style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, letterSpacing: 1.1),
+            ),
+            const SizedBox(height: 12),
             Text(
               r.address,
-              style: const TextStyle(color: Colors.white54),
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFD700),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.directions),
+                label: const Text('GET DIRECTIONS', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  _restaurantService.openMapDirections(r.latitude, r.longitude);
+                },
+              ),
+            )
           ],
         ),
       ),
     );
   }
 
-  // ONLY ONE DISPOSE (optional cleanup not required here)
   @override
   void dispose() {
+    _locationSubscription?.cancel();
+    _mapController.dispose();
     super.dispose();
   }
 }
