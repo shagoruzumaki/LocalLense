@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../constants.dart'; // API keys
+import '../constant.dart'; // API keys
 import 'package:http/http.dart' as http;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
