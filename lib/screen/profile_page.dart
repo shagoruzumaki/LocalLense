@@ -12,7 +12,7 @@ class ProfilePage extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context), // Fixed: Now returns to previous screen
+          onPressed: () {},
         ),
         title: const Text('LocalLens', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
         actions: [
@@ -85,6 +85,73 @@ class ProfilePage extends StatelessWidget {
             _buildSettingsItem(Icons.verified_user_outlined, 'Verification', trailing: _buildVerifiedBadge()),
             _buildSettingsItem(Icons.person_outline, 'Personal Information'),
             _buildSettingsItem(Icons.payment_outlined, 'Payment Methods'),
+            const SizedBox(height: 32),
+            // Recent Reviews
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildSectionHeader('Recent Reviews'),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('View All', style: TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildRecentReview(
+              'Arif Rahman',
+              'The artisanal coffee at \'The Rusty Bean\' is unmatched. The moody lighting and velvet seating make it the perfect urban escape.',
+              '5.0',
+            ),
+            const SizedBox(height: 16),
+            _buildRecentReview(
+              'Arif Rahman',
+              'Found this hidden gem near the docks. The seafood platter is exquisite and the staff really knows their craft.',
+              '4.8',
+            ),
+            const SizedBox(height: 24),
+            // Milestone
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Next Milestone', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text('850 / 1000 XP', style: TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: const LinearProgressIndicator(
+                      value: 0.85,
+                      backgroundColor: Colors.white10,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  RichText(
+                    text: const TextSpan(
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                      children: [
+                        TextSpan(text: 'Complete 3 more verified reviews to unlock the '),
+                        TextSpan(text: 'Elite Explorer', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
+                        TextSpan(text: ' status.'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 100),
           ],
         ),
@@ -160,6 +227,48 @@ class ProfilePage extends StatelessWidget {
           Icon(Icons.check_circle, color: Colors.green, size: 12),
           SizedBox(width: 4),
           Text('VERIFIED', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentReview(String name, String content, String rating) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 4),
+              const Icon(Icons.check_circle, color: Colors.green, size: 14),
+              const Spacer(),
+              const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+              const SizedBox(width: 4),
+              Text(rating, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(content, style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 13)),
+          const SizedBox(height: 12),
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: Colors.white10,
+              image: const DecorationImage(
+                image: NetworkImage('https://images.unsplash.com/photo-1541167760496-162955ed8a9f?q=80&w=200&auto=format&fit=crop'),
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
         ],
       ),
     );

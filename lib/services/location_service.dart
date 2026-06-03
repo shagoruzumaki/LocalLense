@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import '../services/location_service.dart';
 
 class LocationService {
   StreamSubscription<Position>? _positionSubscription;

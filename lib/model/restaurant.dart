@@ -1,4 +1,3 @@
-import '../utils/location_utils.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// Matches the `restaurants` table in Supabase exactly.

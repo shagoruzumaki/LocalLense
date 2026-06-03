@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:typed_data';
 
 /// 3.1 & 3.2: User Management Service
 class UserService {

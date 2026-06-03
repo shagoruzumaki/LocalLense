@@ -2,6 +2,7 @@
 /// Validates all user inputs before sending to Supabase
 /// Replaces Joi/Zod (those are Node.js libraries)
 /// Member 1 — Ismail Hossain Shagor
+library;
 
 class Validators {
 
