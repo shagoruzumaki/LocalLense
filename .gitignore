@@ -50,3 +50,7 @@ lib/constants.dart
 
 supabase/.temp/
 
+
+# Sensitive data
+lib/constants.dart
+
