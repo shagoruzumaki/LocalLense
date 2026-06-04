@@ -46,11 +46,6 @@ app.*.map.json
 
 
 # Sensitive data
-lib/constants.dart
 
 supabase/.temp/
-
-
-# Sensitive data
-lib/constants.dart
 
