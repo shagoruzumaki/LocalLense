@@ -351,6 +351,15 @@ class ReviewApi {
   }
 
   // ─────────────────────────────────────────────
+  // PUBLIC WRAPPER: Recalculate score
+  // Called by AdminApi when a review is removed by admin
+  // Exposes _recalculateScore() without duplicating logic
+  // ─────────────────────────────────────────────
+  Future<void> recalculateScorePublic(String restaurantId) async {
+    await _recalculateScore(restaurantId);
+  }
+
+  // ─────────────────────────────────────────────
   // PRIVATE HELPER: Recalculate restaurant score
   // Fetches all reviews → builds ReviewInput list →
   // calls RestaurantScoreCalculator.calculate() →
