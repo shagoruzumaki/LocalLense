@@ -4,141 +4,140 @@ import '../model/restaurant.dart';
 class Top10Service {
   final _supabase = Supabase.instance.client;
 
-  /// 3.3 Top 10 Restaurants
-  /// Filters: 'week', 'month', 'alltime'
+  /// Real-time stream for the All-Time restaurant leaderboard.
+  Stream<List<Restaurant>> getTop10RestaurantsStream() {
+    return _supabase
+        .from('restaurants')
+        .stream(primaryKey: ['id'])
+        .eq('active', true)
+        .asyncMap((data) async {
+          List<Restaurant> results = data.map((json) => Restaurant.fromSupabase(json)).toList();
+          
+          // If we have less than 10, fill with top rated fallback first
+          if (results.length < 10) {
+            final fallback = await _fetchTopRatedFallback();
+            for (var r in fallback) {
+              if (results.length >= 10) break;
+              if (!results.any((ex) => ex.id == r.id)) {
+                results.add(r);
+              }
+            }
+          }
+          
+          // STRICT GLOBAL SORT: Prioritize Algorithm Score (which is reflected in the .rating getter)
+          results.sort((a, b) => b.rating.compareTo(a.rating));
+          
+          return results.take(10).toList();
+        });
+  }
+
+  /// Real-time stream for the Critics leaderboard.
+  Stream<List<Map<String, dynamic>>> getTop10CriticsStream() {
+    return _supabase
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .order('helpful_votes', ascending: false)
+        .limit(10)
+        .map((data) {
+          return data.map((u) {
+            final user = Map<String, dynamic>.from(u);
+            int multiplier = _getTierMultiplier(user['tier']?.toString() ?? 'explorer');
+            return {
+              ...user,
+              'rank_score': (user['helpful_votes'] as int? ?? 0) * multiplier,
+            };
+          }).toList();
+        });
+  }
+
+  /// Period-based fetch (Week/Month) which requires aggregation
   Future<List<Restaurant>> getTop10Restaurants({String filter = 'alltime'}) async {
     try {
+      List<Restaurant> results = [];
+      
       if (filter == 'alltime') {
         final response = await _supabase
             .from('restaurants')
             .select('*')
-            .eq('active', true)
-            .order('algorithm_score', ascending: false)
-            .limit(10);
+            .eq('active', true);
         
-        return (response as List).map((json) => Restaurant.fromSupabase(json)).toList();
+        results = (response as List).map((json) => Restaurant.fromSupabase(json)).toList();
       } else {
-        // For week/month, we calculate based on review average in that period
         final days = filter == 'week' ? 7 : 30;
-        final startDate = DateTime.now().subtract(Duration(days: days)).toIso8601String();
+        final startDate = DateTime.now().subtract(Duration(days: days)).toUtc().toIso8601String();
 
-        // 1. Fetch reviews in the period
-        final reviewsResponse = await _supabase
+        final reviewsResp = await _supabase
             .from('reviews')
-            .select('restaurant_id, rating')
-            .gte('created_at', startDate)
-            .eq('flagged', false);
-
-        final reviews = reviewsResponse as List;
-        if (reviews.isEmpty) return getTop10Restaurants(filter: 'alltime');
-
-        // 2. Aggregate
-        Map<String, List<double>> restaurantRatings = {};
-        for (var r in reviews) {
-          final id = r['restaurant_id'] as String;
-          final rating = (r['rating'] as num).toDouble();
-          restaurantRatings.putIfAbsent(id, () => []).add(rating);
+            .select('restaurant_id')
+            .gte('created_at', startDate);
+        
+        final reviews = reviewsResp as List;
+        
+        if (reviews.isEmpty) {
+          // If no recent activity, fallback to the all-time list
+          return await getTop10Restaurants(filter: 'alltime');
+        } else {
+          Set<String> recentIds = reviews.map((r) => r['restaurant_id'].toString()).toSet();
+          final restaurantsResp = await _supabase
+              .from('restaurants')
+              .select('*')
+              .inFilter('id', recentIds.toList())
+              .eq('active', true);
+              
+          results = (restaurantsResp as List).map((j) => Restaurant.fromSupabase(j)).toList();
         }
-
-        // 3. Calculate average and sort
-        var sortedIds = restaurantRatings.keys.toList();
-        sortedIds.sort((a, b) {
-          double avgA = restaurantRatings[a]!.reduce((a, b) => a + b) / restaurantRatings[a]!.length;
-          double avgB = restaurantRatings[b]!.reduce((a, b) => a + b) / restaurantRatings[b]!.length;
-          return avgB.compareTo(avgA);
-        });
-
-        final top10Ids = sortedIds.take(10).toList();
-
-        // 4. Fetch restaurant details
-        final restaurantsResponse = await _supabase
-            .from('restaurants')
-            .select('*')
-            .inFilter('id', top10Ids);
-
-        final List<Restaurant> result = (restaurantsResponse as List)
-            .map((json) => Restaurant.fromSupabase(json))
-            .toList();
-        
-        // Re-sort because inFilter doesn't preserve order
-        result.sort((a, b) => top10Ids.indexOf(a.id).compareTo(top10Ids.indexOf(b.id)));
-        
-        return result;
       }
+
+      // If we don't have enough results for a Top 10, fill from general top rated
+      if (results.length < 10) {
+        final fallback = await _fetchTopRatedFallback();
+        for (var r in fallback) {
+          if (results.length >= 10) break;
+          if (!results.any((ex) => ex.id == r.id)) {
+            results.add(r);
+          }
+        }
+      }
+
+      // FINAL GLOBAL SORT: This ensures #1 is always the highest rating/score
+      results.sort((a, b) => b.rating.compareTo(a.rating));
+      
+      return results.take(10).toList();
     } catch (e) {
-      print('Error in getTop10Restaurants: $e');
+      return await _fetchTopRatedFallback();
+    }
+  }
+
+  /// Helper to fetch high-quality restaurants for fill-ins
+  Future<List<Restaurant>> _fetchTopRatedFallback() async {
+    try {
+      final response = await _supabase
+          .from('restaurants')
+          .select('*')
+          .eq('active', true)
+          .order('rating', ascending: false)
+          .limit(20);
+      
+      return (response as List).map((json) => Restaurant.fromSupabase(json)).toList();
+    } catch (_) {
       return [];
     }
   }
 
-  /// 3.3 Top 10 Critics
-  /// Ranking formula: score = helpful_votes_in_period × tier_multiplier
-  /// Platinum=4, Diamond=3, Expert=2, Explorer=1
   Future<List<Map<String, dynamic>>> getTop10Critics({String filter = 'alltime'}) async {
-    try {
-      if (filter == 'alltime') {
-        final response = await _supabase
-            .from('users')
-            .select('id, name, profile_photo_url, helpful_votes, tier')
-            .eq('is_deleted', false)
-            .order('helpful_votes', ascending: false)
-            .limit(10);
-
-        return (response as List).map((c) {
-          final user = Map<String, dynamic>.from(c as Map);
-          int multiplier = _getTierMultiplier(user['tier']?.toString() ?? 'explorer');
-          return {
-            ...user,
-            'rank_score': (user['helpful_votes'] as int? ?? 0) * multiplier,
-          };
-        }).toList();
-      } else {
-        final days = filter == 'week' ? 7 : 30;
-        final startDate = DateTime.now().subtract(Duration(days: days)).toIso8601String();
-
-        // Count votes received by users in this period
-        // review_votes table: review_id, voter_id, created_at
-        // reviews table: id, user_id (author)
-        final response = await _supabase
-            .from('review_votes')
-            .select('reviews(user_id)')
-            .gte('created_at', startDate);
-
-        final votes = response as List;
-        Map<String, int> userVotes = {};
-        for (var v in votes) {
-          final authorId = v['reviews']['user_id'] as String;
-          userVotes[authorId] = (userVotes[authorId] ?? 0) + 1;
-        }
-
-        if (userVotes.isEmpty) return getTop10Critics(filter: 'alltime');
-
-        // Fetch user details for these authors
-        final userIds = userVotes.keys.toList();
-        final usersResponse = await _supabase
-            .from('users')
-            .select('id, name, profile_photo_url, tier')
-            .inFilter('id', userIds);
-
-        final List<Map<String, dynamic>> rankedCritics = (usersResponse as List).map((u) {
-          final user = Map<String, dynamic>.from(u as Map);
-          int multiplier = _getTierMultiplier(user['tier']?.toString() ?? 'explorer');
-          int periodVotes = userVotes[user['id']] ?? 0;
-          
-          return {
-            ...user,
-            'helpful_votes': periodVotes, // for this period
-            'rank_score': periodVotes * multiplier,
-          };
-        }).toList();
-
-        rankedCritics.sort((a, b) => (b['rank_score'] as int).compareTo(a['rank_score'] as int));
-        return rankedCritics.take(10).toList();
-      }
-    } catch (e) {
-      print('Error in getTop10Critics: $e');
-      return [];
-    }
+    final response = await _supabase
+        .from('profiles')
+        .select('*')
+        .order('helpful_votes', ascending: false)
+        .limit(10);
+    
+    return (response as List).map((u) {
+      final user = Map<String, dynamic>.from(u);
+      return {
+        ...user,
+        'rank_score': (user['helpful_votes'] as int? ?? 0) * _getTierMultiplier(user['tier']?.toString() ?? 'explorer'),
+      };
+    }).toList();
   }
 
   int _getTierMultiplier(String tier) {
@@ -146,7 +145,6 @@ class Top10Service {
       case 'platinum': return 4;
       case 'diamond': return 3;
       case 'expert': return 2;
-      case 'explorer':
       default: return 1;
     }
   }

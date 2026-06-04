@@ -1,0 +1,28 @@
+name: CI & CD
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: flutter pub get
+      - run: flutter test
+
+  deploy-edge-functions:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: supabase/setup-cli@v1
+      - run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - run: supabase functions deploy send-notification --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
