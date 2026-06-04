@@ -5,8 +5,10 @@ import 'package:local_lense/screen/discover_page.dart';
 import 'package:local_lense/screen/home_page.dart';
 import 'package:local_lense/screen/login_page.dart';
 import 'package:local_lense/screen/profile_page.dart';
+import 'package:local_lense/screen/map_page.dart';
+import 'package:local_lense/screen/splash_screen.dart';
+import 'package:local_lense/screen/landing_page.dart';
 import 'package:local_lense/view/auth_gate.dart';
-import 'screen/screens.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_lense/screen/signup_page.dart';
 import 'package:local_lense/screen/ranking_page.dart';
@@ -15,11 +17,10 @@ import 'package:local_lense/screen/restaurant_details_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(
-      url: 'https://bevgjdxwozuezcunizho.supabase.co',
-      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
+    url: 'https://bevgjdxwozuezcunizho.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
   );
   runApp(const MyApp());
-  final supabase = Supabase.instance.client;
 }
 
 class MyApp extends StatelessWidget {
@@ -38,21 +39,26 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-       home: AuthGate(
-           homeScreen: const HomePage(),
-           loginScreen: const LoginPage(),
-           resetPasswordScreen: const ResetPasswordPage(),
-       ),
-       routes: {
-         '/login': (_) => const LoginPage(),
-         '/register': (_) => const SignupPage(),
-         '/forgot-password': (_) => const ForgotPasswordPage(),
-         '/reset-password': (_) => const ResetPasswordPage(),
-         '/discover': (_) => const DiscoverPage(),
-         '/profile': (_) => const ProfilePage(),
-         '/ranking': (_) => const RankingPage(),
-         '/restaurant-details': (_) => const RestaurantDetailsPage(),
-       },
+      // Setting SplashScreen as the initial screen
+      home: const SplashScreen(),
+      routes: {
+        '/landing': (_) => const LandingPage(),
+        '/auth': (_) => AuthGate(
+              homeScreen: const HomePage(),
+              loginScreen: const LoginPage(),
+              resetPasswordScreen: const ResetPasswordPage(),
+            ),
+        '/login': (_) => const LoginPage(),
+        '/register': (_) => const SignupPage(),
+        '/forgot-password': (_) => const ForgotPasswordPage(),
+        '/reset-password': (_) => const ResetPasswordPage(),
+        '/discover': (_) => const DiscoverPage(),
+        '/profile': (_) => const ProfilePage(),
+        '/ranking': (_) => const RankingPage(),
+        '/restaurant-details': (_) => const RestaurantDetailsPage(),
+        '/map': (_) => const MapPage(), // Removed const here
+        '/home': (_) => const HomePage(),
+      },
     );
   }
 }

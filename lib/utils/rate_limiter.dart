@@ -3,6 +3,7 @@
 /// Prevents spam tapping on login, register, forgot password
 /// Supabase handles server-side rate limiting automatically
 /// Member 1 — Ismail Hossain Shagor
+library;
 
 class RateLimiter {
   // Stores last attempt timestamps per action key
