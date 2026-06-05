@@ -1,7 +1,109 @@
+import 'dart:io';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../api/review_system.dart';
 
-class RestaurantDetailsPage extends StatelessWidget {
-  const RestaurantDetailsPage({super.key});
+class RestaurantDetailsPage extends StatefulWidget {
+  final String restaurantId;
+  const RestaurantDetailsPage({super.key, required this.restaurantId});
+
+  @override
+  State<RestaurantDetailsPage> createState() => _RestaurantDetailsPageState();
+}
+
+class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
+  final ReviewApi _reviewApi = ReviewApi();
+
+  int _selectedTab = 0; // 0=Overview, 1=Menu, 2=Reviews, 3=Photos
+  List<Map<String, dynamic>> _reviews = [];
+  bool _loadingReviews = false;
+  final Set<String> _votedReviewIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReviews();
+  }
+
+  // ─────────────────────────────────────────────
+  // Load reviews for this restaurant
+  // ─────────────────────────────────────────────
+  Future<void> _loadReviews() async {
+    setState(() => _loadingReviews = true);
+    try {
+      final reviews = await _reviewApi.getRestaurantReviews(
+        widget.restaurantId,
+      );
+      setState(() => _reviews = reviews);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load reviews: $e')),
+        );
+      }
+    } finally {
+      setState(() => _loadingReviews = false);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Handle helpful vote
+  // ─────────────────────────────────────────────
+  Future<void> _handleVote(String reviewId) async {
+    final alreadyVoted = _votedReviewIds.contains(reviewId);
+    try {
+      if (alreadyVoted) {
+        await _reviewApi.unvoteReview(reviewId);
+        setState(() {
+          _votedReviewIds.remove(reviewId);
+          final idx = _reviews.indexWhere((r) => r['id'] == reviewId);
+          if (idx != -1) {
+            _reviews[idx]['helpful_votes'] =
+                (_reviews[idx]['helpful_votes'] as int) - 1;
+          }
+        });
+      } else {
+        await _reviewApi.voteReview(reviewId);
+        setState(() {
+          _votedReviewIds.add(reviewId);
+          final idx = _reviews.indexWhere((r) => r['id'] == reviewId);
+          if (idx != -1) {
+            _reviews[idx]['helpful_votes'] =
+                (_reviews[idx]['helpful_votes'] as int) + 1;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Open Write Review bottom sheet
+  // ─────────────────────────────────────────────
+  void _openReviewForm() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _ReviewFormSheet(
+        restaurantId: widget.restaurantId,
+        reviewApi: _reviewApi,
+        onSubmitted: () {
+          _loadReviews();
+          setState(() => _selectedTab = 2); // switch to Reviews tab
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -9,6 +111,7 @@ class RestaurantDetailsPage extends StatelessWidget {
       backgroundColor: const Color(0xFF0D0D0D),
       body: CustomScrollView(
         slivers: [
+          // ── Hero Image + Restaurant Name ──────────────────
           SliverAppBar(
             expandedHeight: 300,
             pinned: true,
@@ -78,13 +181,14 @@ class RestaurantDetailsPage extends StatelessWidget {
               ),
             ],
           ),
+
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Score and Actions
+                  // ── Score + Actions ──────────────────────────
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -103,11 +207,15 @@ class RestaurantDetailsPage extends StatelessWidget {
                               children: [
                                 Text(
                                   'Algorithm Score',
-                                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 Text(
                                   'Top 2% in the district',
-                                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                                  style: TextStyle(
+                                      color: Colors.white54, fontSize: 14),
                                 ),
                               ],
                             ),
@@ -123,10 +231,14 @@ class RestaurantDetailsPage extends StatelessWidget {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFFFD700),
                                   foregroundColor: Colors.black,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(vertical: 15),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 15),
                                 ),
-                                child: const Text('BOOK TABLE', style: TextStyle(fontWeight: FontWeight.bold)),
+                                child: const Text('BOOK TABLE',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold)),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -135,9 +247,12 @@ class RestaurantDetailsPage extends StatelessWidget {
                                 onPressed: () {},
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: Colors.white,
-                                  side: const BorderSide(color: Colors.white24),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(vertical: 15),
+                                  side: const BorderSide(
+                                      color: Colors.white24),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 15),
                                 ),
                                 child: const Icon(Icons.share_outlined),
                               ),
@@ -148,70 +263,37 @@ class RestaurantDetailsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 25),
-                  // Tabs
-                  const Row(
+
+                  // ── Tabs ─────────────────────────────────────
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _TabItem(label: 'OVERVIEW', isSelected: true),
-                      _TabItem(label: 'MENU'),
-                      _TabItem(label: 'REVIEWS'),
-                      _TabItem(label: 'PHOTOS'),
+                      _TabItem(
+                          label: 'OVERVIEW',
+                          isSelected: _selectedTab == 0,
+                          onTap: () => setState(() => _selectedTab = 0)),
+                      _TabItem(
+                          label: 'MENU',
+                          isSelected: _selectedTab == 1,
+                          onTap: () => setState(() => _selectedTab = 1)),
+                      _TabItem(
+                          label: 'REVIEWS',
+                          isSelected: _selectedTab == 2,
+                          onTap: () => setState(() => _selectedTab = 2)),
+                      _TabItem(
+                          label: 'PHOTOS',
+                          isSelected: _selectedTab == 3,
+                          onTap: () => setState(() => _selectedTab = 3)),
                     ],
                   ),
                   const SizedBox(height: 25),
-                  // Community Summary
-                  _buildSectionHeader('Community Summary'),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
-                    ),
-                    child: const Text(
-                      '"Reviewers consistently highlight the smoked hilsa as a culinary masterpiece. The atmosphere is described as an intimate urban sanctuary, perfect for sophisticated evening gatherings where the quality of the curated playlist matches the artisanal cocktails."',
-                      style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, height: 1.5),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  _buildSectionHeader('The Vibe'),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Stepping into The Copper Lantern is akin to discovering a secret garden hidden within the city\'s concrete heart. The lighting is deliberate—low-slung amber bulbs that cast long, artistic shadows. It\'s a place where conversations stay private and the scent of aged teak and distant spices hangs elegantly in the air.',
-                    style: TextStyle(color: Colors.white60, height: 1.5),
-                  ),
-                  const SizedBox(height: 25),
-                  _buildSectionHeader('Location'),
-                  const SizedBox(height: 15),
-                  Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.white10,
-                      image: const DecorationImage(
-                        image: NetworkImage('https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=500&auto=format&fit=crop'),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  const Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, color: Color(0xFFFFD700), size: 20),
-                      SizedBox(width: 10),
-                      Text('42 Lantern Way, Old Town', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  const Row(
-                    children: [
-                      Icon(Icons.access_time, color: Color(0xFFFFD700), size: 20),
-                      SizedBox(width: 10),
-                      Text('Open: 6:00 PM - 2:00 AM', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
+
+                  // ── Tab Content ───────────────────────────────
+                  if (_selectedTab == 0) _buildOverviewTab(),
+                  if (_selectedTab == 1) _buildMenuTab(),
+                  if (_selectedTab == 2) _buildReviewsTab(),
+                  if (_selectedTab == 3) _buildPhotosTab(),
+
                   const SizedBox(height: 100),
                 ],
               ),
@@ -219,6 +301,411 @@ class RestaurantDetailsPage extends StatelessWidget {
           ),
         ],
       ),
+
+      // ── Write a Review Button ─────────────────────────
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0D0D),
+          border: Border(top: BorderSide(color: Colors.white10)),
+        ),
+        child: ElevatedButton.icon(
+          onPressed: _openReviewForm,
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          label: const Text('Write a Review',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFFD700),
+            foregroundColor: Colors.black,
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // OVERVIEW TAB — your existing content
+  // ─────────────────────────────────────────────
+  Widget _buildOverviewTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Community Summary'),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFD700).withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
+          ),
+          child: const Text(
+            '"Reviewers consistently highlight the smoked hilsa as a culinary masterpiece. The atmosphere is described as an intimate urban sanctuary, perfect for sophisticated evening gatherings."',
+            style: TextStyle(
+                color: Colors.white70,
+                fontStyle: FontStyle.italic,
+                height: 1.5),
+          ),
+        ),
+        const SizedBox(height: 25),
+        _buildSectionHeader('The Vibe'),
+        const SizedBox(height: 10),
+        const Text(
+          'Stepping into The Copper Lantern is akin to discovering a secret garden hidden within the city\'s concrete heart. The lighting is deliberate—low-slung amber bulbs that cast long, artistic shadows.',
+          style: TextStyle(color: Colors.white60, height: 1.5),
+        ),
+        const SizedBox(height: 25),
+        _buildSectionHeader('Location'),
+        const SizedBox(height: 15),
+        Container(
+          height: 180,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: Colors.white10,
+            image: const DecorationImage(
+              image: NetworkImage(
+                  'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=500&auto=format&fit=crop'),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        const SizedBox(height: 15),
+        const Row(
+          children: [
+            Icon(Icons.location_on_outlined,
+                color: Color(0xFFFFD700), size: 20),
+            SizedBox(width: 10),
+            Text('42 Lantern Way, Old Town',
+                style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        const Row(
+          children: [
+            Icon(Icons.access_time, color: Color(0xFFFFD700), size: 20),
+            SizedBox(width: 10),
+            Text('Open: 6:00 PM - 2:00 AM',
+                style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // MENU TAB
+  // ─────────────────────────────────────────────
+  Widget _buildMenuTab() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Text('Menu coming soon.',
+            style: TextStyle(color: Colors.white38)),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // REVIEWS TAB
+  // ─────────────────────────────────────────────
+  Widget _buildReviewsTab() {
+    if (_loadingReviews) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 60),
+          child: CircularProgressIndicator(color: Color(0xFFFFD700)),
+        ),
+      );
+    }
+
+    if (_reviews.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 60),
+          child: Column(
+            children: [
+              const Icon(Icons.rate_review_outlined,
+                  color: Colors.white24, size: 48),
+              const SizedBox(height: 16),
+              const Text('No reviews yet.',
+                  style: TextStyle(color: Colors.white38, fontSize: 16)),
+              const SizedBox(height: 8),
+              const Text('Be the first to review this place!',
+                  style: TextStyle(color: Colors.white24, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Review count header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '${_reviews.length} Reviews',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
+            TextButton(
+              onPressed: _loadReviews,
+              child: const Text('Refresh',
+                  style: TextStyle(color: Color(0xFFFFD700), fontSize: 13)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Reviews list
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _reviews.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (_, index) =>
+              _buildReviewCard(_reviews[index]),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // SINGLE REVIEW CARD
+  // ─────────────────────────────────────────────
+  Widget _buildReviewCard(Map<String, dynamic> review) {
+    final user = review['users'] as Map<String, dynamic>? ?? {};
+    final reviewId = review['id'] as String;
+    final helpfulVotes = review['helpful_votes'] as int? ?? 0;
+    final isVoted = _votedReviewIds.contains(reviewId);
+    final moodTag = review['mood_tag'] as String? ?? '';
+    final rating = (review['rating'] as num?)?.toDouble() ?? 0.0;
+    final body = review['body'] as String? ?? '';
+    final photos = List<String>.from(review['photos'] ?? []);
+    final tier = user['tier'] as String? ?? 'explorer';
+    final name = user['name'] as String? ?? 'Anonymous';
+    final verified = user['verified'] as bool? ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Author Row ──────────────────────────
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFFFFD700).withValues(alpha: 0.2),
+                backgroundImage: user['profile_photo_url'] != null
+                    ? NetworkImage(user['profile_photo_url'] as String)
+                    : null,
+                child: user['profile_photo_url'] == null
+                    ? Text(name[0].toUpperCase(),
+                    style: const TextStyle(
+                        color: Color(0xFFFFD700),
+                        fontWeight: FontWeight.bold))
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(name,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14)),
+                        if (verified) ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.verified,
+                              color: Colors.green, size: 14),
+                        ],
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        _buildTierBadge(tier),
+                        const SizedBox(width: 8),
+                        _buildStars(rating, size: 12),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Mood tag
+              _buildMoodTag(moodTag),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // ── Review Body ─────────────────────────
+          Text(body,
+              style: const TextStyle(
+                  color: Colors.white70, height: 1.5, fontSize: 14)),
+
+          // ── Photos ──────────────────────────────
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 80,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: photos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(photos[i],
+                      width: 80, height: 80, fit: BoxFit.cover),
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white10),
+          const SizedBox(height: 8),
+
+          // ── Helpful Vote Button ─────────────────
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => _handleVote(reviewId),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isVoted
+                        ? const Color(0xFFFFD700).withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isVoted
+                          ? const Color(0xFFFFD700).withValues(alpha: 0.5)
+                          : Colors.white12,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isVoted
+                            ? Icons.thumb_up
+                            : Icons.thumb_up_outlined,
+                        color: isVoted
+                            ? const Color(0xFFFFD700)
+                            : Colors.white38,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$helpfulVotes Helpful',
+                        style: TextStyle(
+                          color: isVoted
+                              ? const Color(0xFFFFD700)
+                              : Colors.white38,
+                          fontSize: 13,
+                          fontWeight: isVoted
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // PHOTOS TAB
+  // ─────────────────────────────────────────────
+  Widget _buildPhotosTab() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Text('Photos coming soon.',
+            style: TextStyle(color: Colors.white38)),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // HELPER WIDGETS
+  // ─────────────────────────────────────────────
+  Widget _buildTierBadge(String tier) {
+    final colors = {
+      'platinum': Colors.cyanAccent,
+      'diamond': Colors.lightBlueAccent,
+      'expert': Colors.purpleAccent,
+      'explorer': Colors.white38,
+    };
+    final color = colors[tier.toLowerCase()] ?? Colors.white38;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(tier.toUpperCase(),
+          style: TextStyle(
+              color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildMoodTag(String moodTag) {
+    final map = {
+      'loved_it': ('❤️ Loved it', Colors.redAccent),
+      'good': ('👍 Good', Colors.greenAccent),
+      'average': ('😐 Average', Colors.orangeAccent),
+    };
+    final data = map[moodTag] ?? ('', Colors.white38);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: data.$2.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: data.$2.withValues(alpha: 0.3)),
+      ),
+      child: Text(data.$1,
+          style: TextStyle(color: data.$2, fontSize: 11)),
+    );
+  }
+
+  Widget _buildStars(double rating, {double size = 16}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (i) {
+        if (i < rating.floor()) {
+          return Icon(Icons.star, color: const Color(0xFFFFD700), size: size);
+        } else if (i < rating) {
+          return Icon(Icons.star_half,
+              color: const Color(0xFFFFD700), size: size);
+        } else {
+          return Icon(Icons.star_border, color: Colors.white24, size: size);
+        }
+      }),
     );
   }
 
@@ -230,10 +717,9 @@ class RestaurantDetailsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
-      child: Text(
-        text,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
-      ),
+      child: Text(text,
+          style: TextStyle(
+              color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -248,51 +734,532 @@ class RestaurantDetailsPage extends StatelessWidget {
             value: score / 100,
             strokeWidth: 4,
             backgroundColor: Colors.white10,
-            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+            valueColor:
+            const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
           ),
         ),
-        Text(
-          score.toString(),
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+        Text(score.toString(),
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
       ],
     );
   }
 
   Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+    return Text(title,
+        style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'serif'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// WRITE REVIEW BOTTOM SHEET
+// ═══════════════════════════════════════════════
+class _ReviewFormSheet extends StatefulWidget {
+  final String restaurantId;
+  final ReviewApi reviewApi;
+  final VoidCallback onSubmitted;
+
+  const _ReviewFormSheet({
+    required this.restaurantId,
+    required this.reviewApi,
+    required this.onSubmitted,
+  });
+
+  @override
+  State<_ReviewFormSheet> createState() => _ReviewFormSheetState();
+}
+
+class _ReviewFormSheetState extends State<_ReviewFormSheet> {
+  final TextEditingController _bodyController = TextEditingController();
+  final TextEditingController _dishController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+
+  String _selectedMood = '';
+  double _selectedRating = 0;
+  List<XFile> _selectedPhotos = [];
+  bool _submitting = false;
+
+  // ─────────────────────────────────────────────
+  // Pick photos from gallery
+  // ─────────────────────────────────────────────
+  Future<void> _pickPhotos() async {
+    final picked = await _picker.pickMultiImage(imageQuality: 80);
+    if (picked.isNotEmpty) {
+      setState(() {
+        _selectedPhotos = picked.take(10).toList(); // max 10
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Upload photos to Supabase Storage
+  // Returns list of public CDN URLs
+  // ─────────────────────────────────────────────
+  Future<List<String>> _uploadPhotos() async {
+    final supabase = Supabase.instance.client;
+    final List<String> urls = [];
+
+    for (final photo in _selectedPhotos) {
+      final bytes = await photo.readAsBytes();
+      final fileName =
+          'review_${DateTime.now().millisecondsSinceEpoch}_${photo.name}';
+      await supabase.storage
+          .from('review-photos')
+          .uploadBinary(fileName, bytes);
+      final url = supabase.storage
+          .from('review-photos')
+          .getPublicUrl(fileName);
+      urls.add(url);
+    }
+    return urls;
+  }
+
+  // ─────────────────────────────────────────────
+  // Submit review
+  // ─────────────────────────────────────────────
+  Future<void> _submitReview() async {
+    // Validation
+    if (_selectedMood.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a mood tag.')),
+      );
+      return;
+    }
+    if (_selectedRating == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a star rating.')),
+      );
+      return;
+    }
+    if (_selectedPhotos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least 1 photo is required.')),
+      );
+      return;
+    }
+    if (_bodyController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please write your review.')),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+
+    try {
+      // Upload photos first
+      final photoUrls = await _uploadPhotos();
+
+      // Parse dish mentions
+      final dishes = _dishController.text
+          .split(',')
+          .map((d) => d.trim())
+          .where((d) => d.isNotEmpty)
+          .toList();
+
+      // Submit review via ReviewApi
+      await widget.reviewApi.submitReview(
+        restaurantId: widget.restaurantId,
+        moodTag: _selectedMood,
+        rating: _selectedRating,
+        photoUrls: photoUrls,
+        body: _bodyController.text.trim(),
+        dishMentions: dishes,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onSubmitted();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Review submitted successfully!'),
+            backgroundColor: Color(0xFFFFD700),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Handle bar ──────────────────────────
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('Write a Review',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+
+            // ── Mood Tag ────────────────────────────
+            const Text('How was it?',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _MoodButton(
+                  emoji: '❤️',
+                  label: 'Loved it',
+                  value: 'loved_it',
+                  selected: _selectedMood == 'loved_it',
+                  onTap: () => setState(() => _selectedMood = 'loved_it'),
+                ),
+                const SizedBox(width: 10),
+                _MoodButton(
+                  emoji: '👍',
+                  label: 'Good',
+                  value: 'good',
+                  selected: _selectedMood == 'good',
+                  onTap: () => setState(() => _selectedMood = 'good'),
+                ),
+                const SizedBox(width: 10),
+                _MoodButton(
+                  emoji: '😐',
+                  label: 'Average',
+                  value: 'average',
+                  selected: _selectedMood == 'average',
+                  onTap: () => setState(() => _selectedMood = 'average'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // ── Star Rating ─────────────────────────
+            const Text('Star Rating',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Row(
+              children: List.generate(5, (i) {
+                final starValue = (i + 1).toDouble();
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedRating = starValue),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      i < _selectedRating ? Icons.star : Icons.star_border,
+                      color: i < _selectedRating
+                          ? const Color(0xFFFFD700)
+                          : Colors.white24,
+                      size: 36,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Photos ──────────────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Photos (min 1)',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600)),
+                TextButton.icon(
+                  onPressed: _pickPhotos,
+                  icon: const Icon(Icons.add_photo_alternate_outlined,
+                      color: Color(0xFFFFD700), size: 18),
+                  label: const Text('Add Photos',
+                      style: TextStyle(
+                          color: Color(0xFFFFD700), fontSize: 13)),
+                ),
+              ],
+            ),
+            if (_selectedPhotos.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 80,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _selectedPhotos.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          File(_selectedPhotos[i].path),
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: GestureDetector(
+                          onTap: () => setState(
+                                  () => _selectedPhotos.removeAt(i)),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close,
+                                color: Colors.white, size: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+
+            // ── Review Body ─────────────────────────
+            const Text('Your Review',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _bodyController,
+              maxLines: 4,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'What did you think? Mention dishes, atmosphere...',
+                hintStyle: const TextStyle(color: Colors.white24),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  const BorderSide(color: Color(0xFFFFD700)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Dish Mentions ───────────────────────
+            const Text('Dishes Mentioned (optional)',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _dishController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'e.g. Smoked Hilsa, Lamb Curry (comma separated)',
+                hintStyle: const TextStyle(color: Colors.white24),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  const BorderSide(color: Color(0xFFFFD700)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            // ── Submit Button ───────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _submitting ? null : _submitReview,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFD700),
+                  foregroundColor: Colors.black,
+                  disabledBackgroundColor:
+                  const Color(0xFFFFD700).withValues(alpha: 0.4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: _submitting
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
+                    : const Text('Submit Review',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _bodyController.dispose();
+    _dishController.dispose();
+    super.dispose();
+  }
+}
+
+// ═══════════════════════════════════════════════
+// MOOD BUTTON WIDGET
+// ═══════════════════════════════════════════════
+class _MoodButton extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final String value;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MoodButton({
+    required this.emoji,
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFFFD700).withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFFFFD700)
+                  : Colors.white12,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected
+                      ? const Color(0xFFFFD700)
+                      : Colors.white38,
+                  fontSize: 11,
+                  fontWeight: selected
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
+// ═══════════════════════════════════════════════
+// TAB ITEM WIDGET
+// ═══════════════════════════════════════════════
 class _TabItem extends StatelessWidget {
   final String label;
   final bool isSelected;
-  const _TabItem({required this.label, this.isSelected = false});
+  final VoidCallback onTap;
+
+  const _TabItem({
+    required this.label,
+    required this.onTap,
+    this.isSelected = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? const Color(0xFFFFD700) : Colors.white38,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected
+                  ? const Color(0xFFFFD700)
+                  : Colors.white38,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        if (isSelected)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            height: 2,
-            width: 40,
-            color: const Color(0xFFFFD700),
-          ),
-      ],
+          if (isSelected)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              height: 2,
+              width: 40,
+              color: const Color(0xFFFFD700),
+            ),
+        ],
+      ),
     );
   }
 }
