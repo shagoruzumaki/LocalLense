@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
+import '../services/restaurant_service.dart';
+import '../model/restaurant.dart';
 
-class DiscoverPage extends StatelessWidget {
+class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
+
+  @override
+  State<DiscoverPage> createState() => _DiscoverPageState();
+}
+
+class _DiscoverPageState extends State<DiscoverPage> {
+  final RestaurantService _restaurantService = RestaurantService();
+  late Future<List<Restaurant>> _restaurantsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _restaurantsFuture = _restaurantService.fetchNearbyRestaurants();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,24 +33,24 @@ class DiscoverPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white10),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_on, color: Color(0xFFFFD700), size: 16),
-              const SizedBox(width: 4),
-              const Text('Dhaka', style: TextStyle(color: Colors.white, fontSize: 14)),
-              const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 16),
+              Icon(Icons.location_on, color: Color(0xFFFFD700), size: 16),
+              SizedBox(width: 4),
+              Text('Nearby Spots', style: TextStyle(color: Colors.white, fontSize: 14)),
+              Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 16),
             ],
           ),
         ),
         actions: [
           IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.tune, color: Colors.white),
+            onPressed: () {
+              setState(() {
+                _restaurantsFuture = _restaurantService.fetchNearbyRestaurants();
+              });
+            },
+            icon: const Icon(Icons.refresh, color: Colors.white),
           ),
         ],
       ),
@@ -57,84 +73,159 @@ class DiscoverPage extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _buildFilterChip('All', isSelected: true),
-                  _buildFilterChip('Restaurants'),
-                  _buildFilterChip('Cafes'),
-                  _buildFilterChip('Street Food'),
-                ],
-              ),
-            ),
             const SizedBox(height: 30),
-            const Row(
-              children: [
-                Icon(Icons.emoji_events_outlined, color: Color(0xFFFFD700), size: 24),
-                SizedBox(width: 8),
-                Text(
-                  'Top 10',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'serif',
-                  ),
-                ),
-              ],
-            ),
             const Text(
-              "This week's best in Dhaka",
-              style: TextStyle(color: Colors.white38, fontSize: 14),
-            ),
-            const SizedBox(height: 20),
-            _buildTop10Section('Top 10 Restaurants', [
-              _buildRankingMiniItem('#1', 'The Spice Trail', 'Fine Indian', '4.9'),
-              _buildRankingMiniItem('#2', 'Neon Street Grill', 'BBQ & Grill', '4.7'),
-              _buildRankingMiniItem('#3', 'Velvet Lounge', 'Continental', '4.8'),
-            ]),
-            const SizedBox(height: 20),
-            _buildTop10Section('Top 10 Critics', [
-              _buildCriticMiniItem('Arif Rahman', '1.2k Reviews', '45k Points', 'GOLD'),
-              _buildCriticMiniItem('Nadia Hossain', '856 Reviews', '28k Points', 'PLATINUM'),
-              _buildCriticMiniItem('Reza Khan', '2.1k Reviews', '60k Points', 'DIAMOND'),
-            ], icon: Icons.verified_user_outlined),
-            const SizedBox(height: 30),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Top Ranked Near You',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'serif',
-                  ),
-                ),
-                Text(
-                  'SEE ALL',
-                  style: TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ],
+              'Real Spots Near You',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'serif',
+              ),
             ),
             const SizedBox(height: 15),
-            SizedBox(
-              height: 200,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _buildNearYouCard('Artisan Lab', 'Artisanal Coffee & Brunch • Banani', '4.8', 'VERIFIED'),
-                  _buildNearYouCard('Umami', 'Modern Japanese • Gulshan', '4.7', ''),
-                ],
-              ),
+            FutureBuilder<List<Restaurant>>(
+              future: _restaurantsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 200,
+                    child: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+                  );
+                }
+                
+                if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+                  return SizedBox(
+                    height: 200,
+                    child: Center(
+                      child: Text(
+                        snapshot.hasError ? 'Error loading data' : 'No restaurants found nearby',
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                  );
+                }
+
+                final restaurants = snapshot.data!;
+                return SizedBox(
+                  height: 220,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: restaurants.length,
+                    itemBuilder: (context, index) {
+                      final r = restaurants[index];
+                      return _buildNearYouCard(r);
+                    },
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 30),
+            // Re-adding the static Top 10 section for design
+            _buildTop10Section('Trending This Week', [
+              _buildRankingMiniItem('#1', 'The Spice Trail', 'Fine Indian', '4.9'),
+              _buildRankingMiniItem('#2', 'Neon Street Grill', 'BBQ & Grill', '4.7'),
+            ]),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildNearYouCard(Restaurant restaurant) {
+    return Container(
+      width: 250,
+      margin: const EdgeInsets.only(right: 15),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              image: DecorationImage(
+                image: NetworkImage(restaurant.imageUrl),
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  restaurant.name,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${restaurant.category} • ${restaurant.address}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                    const SizedBox(width: 4),
+                    Text(restaurant.rating.toString(), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTop10Section(String title, List<Widget> items) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 15),
+          ...items,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRankingMiniItem(String rank, String title, String category, String rating) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          const SizedBox(width: 12),
+          const Icon(Icons.restaurant, color: Color(0xFFFFD700), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text('$category • $rating ★', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -153,178 +244,6 @@ class DiscoverPage extends StatelessWidget {
           color: isSelected ? Colors.black : Colors.white,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
-      ),
-    );
-  }
-
-  Widget _buildTop10Section(String title, List<Widget> items, {IconData icon = Icons.restaurant}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              Icon(icon, color: const Color(0xFFFFD700), size: 18),
-            ],
-          ),
-          const SizedBox(height: 15),
-          ...items,
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () {},
-              icon: const Text('See Full List', style: TextStyle(color: Color(0xFFFFD700))),
-              label: const Icon(Icons.arrow_forward, color: Color(0xFFFFD700), size: 16),
-              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRankingMiniItem(String rank, String title, String category, String rating) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          const SizedBox(width: 12),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: Colors.white10,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text('$category • $rating ★', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCriticMiniItem(String name, String reviews, String points, String level) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          const CircleAvatar(radius: 20, backgroundColor: Colors.white10),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.check_circle, color: Colors.green, size: 14),
-                  ],
-                ),
-                Text('$reviews • $points', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              level,
-              style: const TextStyle(color: Color(0xFFFFD700), fontSize: 8, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNearYouCard(String title, String subtitle, String rating, String badge) {
-    return Container(
-      width: 250,
-      margin: const EdgeInsets.only(right: 15),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              Container(
-                height: 120,
-                decoration: const BoxDecoration(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  color: Colors.white10,
-                ),
-              ),
-              if (badge.isNotEmpty)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      badge,
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
-                        Text(rating, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'signup_page.dart';
 import 'home_page.dart';
-import 'landing_page.dart';
 import 'ForgotPassword_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_lense/services/auth_services.dart';
