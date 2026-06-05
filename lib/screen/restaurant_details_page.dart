@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../api/review_system.dart';
+import 'score_breakdown_page.dart';
 
 class RestaurantDetailsPage extends StatefulWidget {
   final String restaurantId;
@@ -189,77 +190,87 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ── Score + Actions ──────────────────────────
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white10),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ScoreBreakdownPage(
+                          restaurantId: widget.restaurantId,
+                        ),
+                      ),
                     ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            _buildScoreCircle(92),
-                            const SizedBox(width: 20),
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Algorithm Score',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  'Top 2% in the district',
-                                  style: TextStyle(
-                                      color: Colors.white54, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: ElevatedButton(
-                                onPressed: () {},
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFFD700),
-                                  foregroundColor: Colors.black,
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 15),
-                                ),
-                                child: const Text('BOOK TABLE',
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              _buildScoreCircle(92),
+                              const SizedBox(width: 20),
+                              const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Algorithm Score',
                                     style: TextStyle(
-                                        fontWeight: FontWeight.bold)),
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    'Top 2% in the district',
+                                    style: TextStyle(
+                                        color: Colors.white54, fontSize: 14),
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () {},
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  side: const BorderSide(
-                                      color: Colors.white24),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 15),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: ElevatedButton(
+                                  onPressed: () {},
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFFD700),
+                                    foregroundColor: Colors.black,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12)),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 15),
+                                  ),
+                                  child: const Text('BOOK TABLE',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
                                 ),
-                                child: const Icon(Icons.share_outlined),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {},
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(
+                                        color: Colors.white24),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12)),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 15),
+                                  ),
+                                  child: const Icon(Icons.share_outlined),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 25),
@@ -318,7 +329,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             backgroundColor: const Color(0xFFFFD700),
             foregroundColor: Colors.black,
             shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             padding: const EdgeInsets.symmetric(vertical: 16),
           ),
         ),
@@ -404,8 +415,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: 60),
-        child: Text('Menu coming soon.',
-            style: TextStyle(color: Colors.white38)),
+        child:
+            Text('Menu coming soon.', style: TextStyle(color: Colors.white38)),
       ),
     );
   }
@@ -470,8 +481,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           physics: const NeverScrollableScrollPhysics(),
           itemCount: _reviews.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, index) =>
-              _buildReviewCard(_reviews[index]),
+          itemBuilder: (_, index) => _buildReviewCard(_reviews[index]),
         ),
       ],
     );
@@ -514,9 +524,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                     : null,
                 child: user['profile_photo_url'] == null
                     ? Text(name[0].toUpperCase(),
-                    style: const TextStyle(
-                        color: Color(0xFFFFD700),
-                        fontWeight: FontWeight.bold))
+                        style: const TextStyle(
+                            color: Color(0xFFFFD700),
+                            fontWeight: FontWeight.bold))
                     : null,
               ),
               const SizedBox(width: 10),
@@ -588,8 +598,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 onTap: () => _handleVote(reviewId),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: isVoted
                         ? const Color(0xFFFFD700).withValues(alpha: 0.15)
@@ -605,12 +615,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isVoted
-                            ? Icons.thumb_up
-                            : Icons.thumb_up_outlined,
-                        color: isVoted
-                            ? const Color(0xFFFFD700)
-                            : Colors.white38,
+                        isVoted ? Icons.thumb_up : Icons.thumb_up_outlined,
+                        color:
+                            isVoted ? const Color(0xFFFFD700) : Colors.white38,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
@@ -621,9 +628,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                               ? const Color(0xFFFFD700)
                               : Colors.white38,
                           fontSize: 13,
-                          fontWeight: isVoted
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                          fontWeight:
+                              isVoted ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -644,8 +650,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: 60),
-        child: Text('Photos coming soon.',
-            style: TextStyle(color: Colors.white38)),
+        child:
+            Text('Photos coming soon.', style: TextStyle(color: Colors.white38)),
       ),
     );
   }
@@ -688,8 +694,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: data.$2.withValues(alpha: 0.3)),
       ),
-      child: Text(data.$1,
-          style: TextStyle(color: data.$2, fontSize: 11)),
+      child: Text(data.$1, style: TextStyle(color: data.$2, fontSize: 11)),
     );
   }
 
@@ -734,8 +739,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             value: score / 100,
             strokeWidth: 4,
             backgroundColor: Colors.white10,
-            valueColor:
-            const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
           ),
         ),
         Text(score.toString(),
@@ -812,9 +816,8 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
       await supabase.storage
           .from('review-photos')
           .uploadBinary(fileName, bytes);
-      final url = supabase.storage
-          .from('review-photos')
-          .getPublicUrl(fileName);
+      final url =
+          supabase.storage.from('review-photos').getPublicUrl(fileName);
       urls.add(url);
     }
     return urls;
@@ -1030,8 +1033,8 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                         top: 2,
                         right: 2,
                         child: GestureDetector(
-                          onTap: () => setState(
-                                  () => _selectedPhotos.removeAt(i)),
+                          onTap: () =>
+                              setState(() => _selectedPhotos.removeAt(i)),
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: const BoxDecoration(
@@ -1076,8 +1079,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                  const BorderSide(color: Color(0xFFFFD700)),
+                  borderSide: const BorderSide(color: Color(0xFFFFD700)),
                 ),
               ),
             ),
@@ -1108,8 +1110,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                  const BorderSide(color: Color(0xFFFFD700)),
+                  borderSide: const BorderSide(color: Color(0xFFFFD700)),
                 ),
               ),
             ),
@@ -1124,23 +1125,23 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                   backgroundColor: const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
                   disabledBackgroundColor:
-                  const Color(0xFFFFD700).withValues(alpha: 0.4),
+                      const Color(0xFFFFD700).withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 child: _submitting
                     ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.black,
-                  ),
-                )
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black,
+                        ),
+                      )
                     : const Text('Submit Review',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
             const SizedBox(height: 16),
@@ -1190,9 +1191,7 @@ class _MoodButton extends StatelessWidget {
                 : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected
-                  ? const Color(0xFFFFD700)
-                  : Colors.white12,
+              color: selected ? const Color(0xFFFFD700) : Colors.white12,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -1203,13 +1202,9 @@ class _MoodButton extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: selected
-                      ? const Color(0xFFFFD700)
-                      : Colors.white38,
+                  color: selected ? const Color(0xFFFFD700) : Colors.white38,
                   fontSize: 11,
-                  fontWeight: selected
-                      ? FontWeight.bold
-                      : FontWeight.normal,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
             ],
@@ -1244,9 +1239,7 @@ class _TabItem extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isSelected
-                  ? const Color(0xFFFFD700)
-                  : Colors.white38,
+              color: isSelected ? const Color(0xFFFFD700) : Colors.white38,
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
