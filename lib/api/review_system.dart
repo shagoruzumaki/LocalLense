@@ -349,6 +349,22 @@ class ReviewApi {
       'ai_tags': response['ai_tags'] ?? [],
     };
   }
+  Future<List<Map<String, dynamic>>> getUserReviews(String userId) async {
+    final response = await _supabase
+        .from('reviews')
+        .select('''
+      *,
+      restaurants (
+        id,
+        name,
+        photos
+      )
+    ''')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
 
   // ─────────────────────────────────────────────
   // PUBLIC WRAPPER: Recalculate score
