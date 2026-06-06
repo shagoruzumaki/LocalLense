@@ -24,7 +24,7 @@ class _MapPageState extends State<MapPage> {
   StreamSubscription<LatLng>? _locationSubscription;
 
   List<RestaurantWithScore> _spots = [];
-  LatLng _userLocation = const LatLng(23.8103, 90.4125);
+  LatLng _userLocation = const LatLng(23.8103, 90.4125); // Default: Dhaka
 
   bool _isLoading = true;
 
@@ -46,18 +46,18 @@ class _MapPageState extends State<MapPage> {
         throw Exception("Location permission/service not available");
       }
 
-      // Initial location
+      // Get Initial location and move map to it
       final initialPos = await _locationService.getCurrentLocation();
       if (mounted) {
         setState(() {
-          _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
+          _userLocation = initialPos;
         });
+        _mapController.move(_userLocation, 14.0);
       }
 
-      // LIVE STREAM
+      // Start live stream to update marker position
       _locationSubscription = _locationService.getLocationStream().listen((newLocation) {
         if (!mounted) return;
-
         setState(() {
           _userLocation = newLocation;
         });
@@ -66,7 +66,9 @@ class _MapPageState extends State<MapPage> {
       await _fetchSpots();
     } catch (e) {
       debugPrint("Map initialization error: $e");
-      await _fetchSpots(); // Fetch anyway using fallback/current location
+      await _fetchSpots(); // Fetch anyway using default (Dhaka)
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -74,10 +76,7 @@ class _MapPageState extends State<MapPage> {
   // RESTAURANTS
   // ─────────────────────────────
   Future<void> _fetchSpots() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
     try {
-      // Fetch real restaurants with scores from our discovery service
       final spots = await _discoveryService.getNearby(
         lat: _userLocation.latitude,
         lng: _userLocation.longitude,
@@ -87,20 +86,13 @@ class _MapPageState extends State<MapPage> {
       if (mounted) {
         setState(() {
           _spots = spots;
-          _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint("Restaurant fetch error: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 
-  // ─────────────────────────────
-  // UI
-  // ─────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -125,76 +117,80 @@ class _MapPageState extends State<MapPage> {
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
               setState(() => _isLoading = true);
-              _fetchSpots();
+              _fetchSpots().then((_) {
+                if (mounted) setState(() => _isLoading = false);
+              });
             },
           )
         ],
       ),
       body: Stack(
         children: [
-          ColorFiltered(
-            // Dark mode filter for the map tiles
-            colorFilter: const ColorFilter.matrix([
-              -1.0, 0.0, 0.0, 0.0, 255.0,
-              0.0, -1.0, 0.0, 0.0, 255.0,
-              0.0, 0.0, -1.0, 0.0, 255.0,
-              0.0, 0.0, 0.0, 1.0, 0.0,
-            ]),
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _userLocation,
-                initialZoom: 14,
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _userLocation,
+              initialZoom: 14,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                subdomains: const ['a', 'b', 'c'],
+                userAgentPackageName: 'com.local_lense.app',
+                tileBuilder: (context, tileWidget, tile) {
+                  return ColorFiltered(
+                    colorFilter: const ColorFilter.matrix([
+                      -1.0, 0.0, 0.0, 0.0, 255.0,
+                      0.0, -1.0, 0.0, 0.0, 255.0,
+                      0.0, 0.0, -1.0, 0.0, 255.0,
+                      0.0, 0.0, 0.0, 1.0, 0.0,
+                    ]),
+                    child: tileWidget,
+                  );
+                },
               ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  subdomains: const ['a', 'b', 'c'],
-                  userAgentPackageName: 'com.local_lense.app',
-                ),
-                MarkerLayer(
-                  markers: [
-                    // USER MARKER
-                    Marker(
-                      point: _userLocation,
-                      width: 40,
-                      height: 40,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.blue, width: 2),
-                        ),
-                        child: const Icon(
-                          Icons.my_location,
-                          color: Colors.blue,
-                          size: 24,
-                        ),
+              MarkerLayer(
+                markers: [
+                  // LIVE USER MARKER
+                  Marker(
+                    point: _userLocation,
+                    width: 40,
+                    height: 40,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.blue, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.my_location,
+                        color: Colors.blue,
+                        size: 24,
                       ),
                     ),
+                  ),
 
-                    // RESTAURANTS
-                    ..._spots.map((item) {
-                      final r = item.restaurant;
-                      final isOpen = item.isOpenNow;
-                      return Marker(
-                        point: LatLng(r.latitude, r.longitude),
-                        width: 45,
-                        height: 45,
-                        child: GestureDetector(
-                          onTap: () => _showRestaurantPopup(item),
-                          child: Icon(
-                            Icons.location_on,
-                            color: isOpen ? const Color(0xFFFFD700) : Colors.white38,
-                            size: 38,
-                          ),
+                  // RESTAURANTS
+                  ..._spots.map((item) {
+                    final r = item.restaurant;
+                    final isOpen = item.isOpenNow;
+                    return Marker(
+                      point: LatLng(r.latitude, r.longitude),
+                      width: 45,
+                      height: 45,
+                      child: GestureDetector(
+                        onTap: () => _showRestaurantPopup(item),
+                        child: Icon(
+                          Icons.location_on,
+                          color: isOpen ? const Color(0xFFFFD700) : Colors.white38,
+                          size: 38,
                         ),
-                      );
-                    }),
-                  ],
-                ),
-              ],
-            ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ],
           ),
           if (_isLoading)
             const Center(
@@ -204,12 +200,17 @@ class _MapPageState extends State<MapPage> {
             ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFFFFD700),
+        foregroundColor: Colors.black,
+        child: const Icon(Icons.my_location),
+        onPressed: () {
+          _mapController.move(_userLocation, 15.0);
+        },
+      ),
     );
   }
 
-  // ─────────────────────────────
-  // POPUP
-  // ─────────────────────────────
   void _showRestaurantPopup(RestaurantWithScore item) {
     final r = item.restaurant;
     final dist = item.distanceKm != null 
@@ -252,8 +253,8 @@ class _MapPageState extends State<MapPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: item.isOpenNow 
-                                  ? Colors.green.withValues(alpha: 0.2) 
-                                  : Colors.red.withValues(alpha: 0.2),
+                                  ? Colors.green.withOpacity(0.2) 
+                                  : Colors.red.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -315,7 +316,7 @@ class _MapPageState extends State<MapPage> {
                 const SizedBox(width: 12),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
