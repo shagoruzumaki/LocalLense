@@ -30,6 +30,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   }
 
   Future<void> _fetchDetails(String id) async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final detail = await _discoveryService.getRestaurantDetail(id);
@@ -45,6 +46,16 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _navigateToDirections() {
+    if (_data == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapPage(targetRestaurant: _data!.restaurant),
+      ),
+    );
   }
 
   @override
@@ -67,191 +78,289 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 300,
-            pinned: true,
-            backgroundColor: const Color(0xFF0D0D0D),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.network(
-                    r.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => Container(color: Colors.white10),
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.3),
-                          const Color(0xFF0D0D0D),
-                        ],
+      body: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 300,
+                pinned: true,
+                backgroundColor: const Color(0xFF0D0D0D),
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        r.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(color: Colors.white10),
                       ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 20,
-                    left: 20,
-                    right: 20,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            _buildBadge(r.category.toUpperCase(), const Color(0xFFFFD700)),
-                            const SizedBox(width: 8),
-                            if (r.active) _buildBadge('VERIFIED', Colors.green),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          r.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'serif',
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.3),
+                              const Color(0xFF0D0D0D),
+                            ],
                           ),
                         ),
-                        Text(
-                          r.address,
-                          style: const TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
+                      ),
+                      Positioned(
+                        bottom: 20,
+                        left: 20,
+                        right: 20,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildScoreCircle((r.algorithmScore ?? 0).toInt()),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _data!.scoreLabel,
-                                    style: const TextStyle(color: Color(0xFFFFD700), fontSize: 18, fontWeight: FontWeight.bold),
-                                  ),
-                                  Text(
-                                    'Lens Algorithm Score based on ${(_scoreBreakdown?.reviewCount ?? 0)} reviews',
-                                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                                  ),
-                                ],
+                            Row(
+                              children: [
+                                _buildBadge(r.categoryDisplay.toUpperCase(), const Color(0xFFFFD700)),
+                                const SizedBox(width: 8),
+                                if (r.active) _buildBadge('VERIFIED', Colors.green),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              r.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'serif',
                               ),
+                            ),
+                            Text(
+                              r.address,
+                              style: const TextStyle(color: Colors.white70, fontSize: 16),
                             ),
                           ],
                         ),
-                        if (_scoreBreakdown != null) ...[
-                          const SizedBox(height: 20),
-                          _buildScoreStat('Quality', _scoreBreakdown!.qualityScore ?? 0),
-                          _buildScoreStat('Trust', _scoreBreakdown!.trustScore ?? 0),
-                          _buildScoreStat('Popularity', _scoreBreakdown!.popularityScore ?? 0),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  _buildSectionHeader('AI Summary'),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFD700).withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
-                    ),
-                    child: Text(
-                      r.aiSummary ?? 'No AI summary available yet for this spot.',
-                      style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, height: 1.5),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  if (r.aiTags != null && r.aiTags!.isNotEmpty) ...[
-                    _buildSectionHeader('Highlights'),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: r.aiTags!.map((tag) => _buildBadge(tag, Colors.white24)).toList(),
-                    ),
-                    const SizedBox(height: 25),
-                  ],
-                  _buildSectionHeader('Location & Hours'),
-                  const SizedBox(height: 15),
-                  
-                  // DIRECTIONS BUTTON
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => MapPage(targetRestaurant: r),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.location_on_outlined, color: Color(0xFFFFD700), size: 20),
-                          const SizedBox(width: 10),
-                          const Text(
-                            'Google Maps Directions', 
-                            style: TextStyle(
-                              color: Color(0xFFFFD700), 
-                              fontWeight: FontWeight.bold,
-                              decoration: TextDecoration.underline,
-                            )
-                          ),
-                          const Spacer(),
-                          const Icon(Icons.chevron_right, color: Color(0xFFFFD700), size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time, color: Colors.white54, size: 20),
-                      const SizedBox(width: 10),
-                      Text(
-                        _data!.isOpenNow ? 'Open Now' : 'Closed',
-                        style: TextStyle(color: _data!.isOpenNow ? Colors.green : Colors.red, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 100),
+                ),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.bookmark_border, color: Colors.white),
+                    onPressed: () {},
+                  ),
                 ],
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Score and Actions
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                _buildScoreCircle((r.algorithmScore ?? 0).toInt()),
+                                const SizedBox(width: 20),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Algorithm Score',
+                                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        _data!.scoreLabel,
+                                        style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: ElevatedButton(
+                                    onPressed: () {},
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFFD700),
+                                      foregroundColor: Colors.black,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      padding: const EdgeInsets.symmetric(vertical: 15),
+                                    ),
+                                    child: const Text('BOOK TABLE', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () {},
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(color: Colors.white24),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      padding: const EdgeInsets.symmetric(vertical: 15),
+                                    ),
+                                    child: const Icon(Icons.share_outlined),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+                      // Tabs
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _TabItem(label: 'OVERVIEW', isSelected: true),
+                          _TabItem(label: 'MENU'),
+                          _TabItem(label: 'REVIEWS'),
+                          _TabItem(label: 'PHOTOS'),
+                        ],
+                      ),
+                      const SizedBox(height: 25),
+                      // Community Summary
+                      _buildSectionHeader('Community Summary'),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD700).withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
+                        ),
+                        child: Text(
+                          r.aiSummary ?? '"Reviewers highlight the excellent ambiance and quality of this spot."',
+                          style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, height: 1.5),
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+                      _buildSectionHeader('The Vibe'),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Stepping into this spot is akin to discovering a secret garden hidden within the city\'s concrete heart. The lighting is deliberate—low-slung amber bulbs that cast long, artistic shadows.',
+                        style: TextStyle(color: Colors.white60, height: 1.5),
+                      ),
+                      const SizedBox(height: 25),
+                      
+                      // CLICKABLE LOCATION SECTION
+                      _buildSectionHeader('Location'),
+                      const SizedBox(height: 15),
+                      InkWell(
+                        onTap: _navigateToDirections,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 180,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                color: Colors.white10,
+                                image: const DecorationImage(
+                                  image: NetworkImage('https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=500&auto=format&fit=crop'),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: const Color(0xFFFFD700), width: 2),
+                                ),
+                                child: const Icon(Icons.navigation, color: Color(0xFFFFD700), size: 30),
+                              ),
+                            ),
+                            const SizedBox(height: 15),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_outlined, color: Color(0xFFFFD700), size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(r.address, style: const TextStyle(color: Colors.white)),
+                                      const Text(
+                                        'Google Maps Directions', 
+                                        style: TextStyle(
+                                          color: Color(0xFFFFD700), 
+                                          fontWeight: FontWeight.bold,
+                                          decoration: TextDecoration.underline,
+                                          fontSize: 13,
+                                        )
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, color: Color(0xFFFFD700), size: 20),
+                          const SizedBox(width: 10),
+                          Text(
+                            _data!.isOpenNow ? 'Open Now' : 'Closed',
+                            style: TextStyle(color: _data!.isOpenNow ? Colors.green : Colors.red, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 120),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Write Review Button
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
+                ),
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Navigate to write review screen
+                },
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Write a Review', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFD700),
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 54),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
               ),
             ),
           ),
@@ -270,7 +379,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       ),
       child: Text(
         text,
-        style: TextStyle(color: color.opacity == 1.0 ? Colors.white : color, fontSize: 10, fontWeight: FontWeight.bold),
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -297,31 +406,40 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     );
   }
 
-  Widget _buildScoreStat(String label, double score) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12))),
-          Expanded(
-            child: LinearProgressIndicator(
-              value: score / 100,
-              backgroundColor: Colors.white10,
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
-              minHeight: 4,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(score.toStringAsFixed(0), style: const TextStyle(color: Colors.white, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+    );
+  }
+}
+
+class _TabItem extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  const _TabItem({required this.label, this.isSelected = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? const Color(0xFFFFD700) : Colors.white38,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (isSelected)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            height: 2,
+            width: 40,
+            color: const Color(0xFFFFD700),
+          ),
+      ],
     );
   }
 }
