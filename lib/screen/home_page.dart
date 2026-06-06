@@ -4,6 +4,7 @@ import '../services/top10_service.dart';
 import '../services/location_service.dart';
 import '../services/discovery_service.dart';
 import '../model/restaurant.dart';
+import 'ranking_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,9 +28,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // Initialize futures immediately to avoid LateInitializationError during first build
-    _top10RestaurantsFuture = _top10Service.getTop10Restaurants(filter: 'week');
-    _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'week');
+    // Initialize futures immediately
+    _top10RestaurantsFuture = _top10Service.getTop10Restaurants(filter: 'alltime');
+    _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'alltime');
     _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: 23.8103, lng: 90.4125, radiusKm: 10);
     _loadData();
   }
@@ -52,8 +53,9 @@ class _HomePageState extends State<HomePage> {
     if (mounted) {
       setState(() {
         _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: lat, lng: lng, radiusKm: 10);
-        _top10RestaurantsFuture = _top10Service.getTop10Restaurants(filter: 'week');
-        _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'week');
+        // Using 'alltime' for Home Page to ensure data shows up even if no recent activity
+        _top10RestaurantsFuture = _top10Service.getTop10Restaurants(filter: 'alltime');
+        _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'alltime');
       });
     }
   }
@@ -64,14 +66,14 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: const Color(0xFF0D0D0D),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => _loadData(),
+          onRefresh: _loadData,
           color: const Color(0xFFFFD700),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Dynamic Top Bar ──────────────────────────────
+                // ── Top Bar ──────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   child: Row(
@@ -126,10 +128,10 @@ class _HomePageState extends State<HomePage> {
                     onTap: () => Navigator.pushNamed(context, '/discover'),
                     decoration: InputDecoration(
                       hintText: 'Search for dishes or places...',
-                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5)),
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      fillColor: Colors.white.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
@@ -143,40 +145,15 @@ class _HomePageState extends State<HomePage> {
                 // ══════════════════════════════════════════
                 // TOP 10 RESTAURANTS SECTION
                 // ══════════════════════════════════════════
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      const Text('🏆', style: TextStyle(fontSize: 18)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Top Ranked',
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
-                            ),
-                            Text(
-                              "Weekly Leaders in $_neighbourhood",
-                              style: const TextStyle(color: Color(0xFF8A7A50), fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
+                _buildSectionHeader('🏆', 'Top Ranked', 'Best of all time in $_neighbourhood'),
                 const SizedBox(height: 14),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: Colors.white.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
                     ),
                     child: FutureBuilder<List<Restaurant>>(
                       future: _top10RestaurantsFuture,
@@ -190,16 +167,7 @@ class _HomePageState extends State<HomePage> {
 
                         return Column(
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-                              child: Row(
-                                children: [
-                                  const Text('Top 10 Restaurants', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                                  const Spacer(),
-                                  Icon(Icons.auto_awesome, color: const Color(0xFFFFD700).withValues(alpha: 0.5), size: 16),
-                                ],
-                              ),
-                            ),
+                            _buildListHeader('Top 10 Restaurants', Icons.auto_awesome),
                             const Divider(color: Colors.white10, height: 1),
                             if (displayList.isEmpty)
                               const Padding(
@@ -220,19 +188,7 @@ class _HomePageState extends State<HomePage> {
                                   onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
                                 );
                               }),
-                            GestureDetector(
-                              onTap: () => Navigator.pushNamed(context, '/ranking'),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Row(
-                                  children: [
-                                    Text('See Full List', style: TextStyle(color: Color(0xFFFFD700), fontSize: 13, fontWeight: FontWeight.w600)),
-                                    SizedBox(width: 4),
-                                    Icon(Icons.arrow_forward, color: Color(0xFFFFD700), size: 14),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            _buildSeeMoreButton('See Full List', () => Navigator.pushNamed(context, '/ranking')),
                           ],
                         );
                       },
@@ -245,13 +201,15 @@ class _HomePageState extends State<HomePage> {
                 // ══════════════════════════════════════════
                 // TOP 10 CRITICS SECTION
                 // ══════════════════════════════════════════
+                _buildSectionHeader('💎', 'Elite Critics', 'Most helpful reviewers'),
+                const SizedBox(height: 14),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: Colors.white.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
                     ),
                     child: FutureBuilder<List<Map<String, dynamic>>>(
                       future: _top10CriticsFuture,
@@ -265,21 +223,12 @@ class _HomePageState extends State<HomePage> {
 
                         return Column(
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-                              child: Row(
-                                children: [
-                                  const Text('Top 10 Critics', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                                  const Spacer(),
-                                  const Icon(Icons.verified_user_outlined, color: Colors.white38, size: 16),
-                                ],
-                              ),
-                            ),
+                            _buildListHeader('Top 10 Critics', Icons.verified_user_outlined),
                             const Divider(color: Colors.white10, height: 1),
                             if (displayCritics.isEmpty)
                               const Padding(
                                 padding: EdgeInsets.all(20),
-                                child: Text('No critics ranked this week', style: TextStyle(color: Colors.white38)),
+                                child: Text('No critics ranked yet', style: TextStyle(color: Colors.white38)),
                               )
                             else
                               ...displayCritics.asMap().entries.map((entry) {
@@ -294,19 +243,14 @@ class _HomePageState extends State<HomePage> {
                                   isLast: idx == displayCritics.length - 1,
                                 );
                               }),
-                            GestureDetector(
-                              onTap: () => Navigator.pushNamed(context, '/ranking'),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Row(
-                                  children: [
-                                    Text('View Leaderboard', style: TextStyle(color: Color(0xFFFFD700), fontSize: 13, fontWeight: FontWeight.w600)),
-                                    SizedBox(width: 4),
-                                    Icon(Icons.arrow_forward, color: Color(0xFFFFD700), size: 14),
-                                  ],
+                            _buildSeeMoreButton('View Leaderboard', () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const RankingPage(initialIndex: 1),
                                 ),
-                              ),
-                            ),
+                              );
+                            }),
                           ],
                         );
                       },
@@ -316,7 +260,7 @@ class _HomePageState extends State<HomePage> {
 
                 const SizedBox(height: 30),
 
-                // ── Found Near You (Requirement 3.1) ───────────
+                // ── Found Near You ───────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
@@ -337,7 +281,7 @@ class _HomePageState extends State<HomePage> {
                         child: Text(
                           'SEE ALL',
                           style: TextStyle(
-                            color: const Color(0xFFFFD700).withValues(alpha: 0.8),
+                            color: const Color(0xFFFFD700).withOpacity(0.8),
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.0,
@@ -412,6 +356,62 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildSectionHeader(String emoji, String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                ),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Color(0xFF8A7A50), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListHeader(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+      child: Row(
+        children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          Icon(icon, color: const Color(0xFFFFD700).withOpacity(0.5), size: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeeMoreButton(String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Text(label, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_forward, color: Color(0xFFFFD700), size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTop10RestaurantRow({
     required String rank,
     required String name,
@@ -442,7 +442,7 @@ class _HomePageState extends State<HomePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(name, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text(category, style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12)),
+                      Text(category, style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12)),
                     ],
                   ),
                 ),
@@ -457,7 +457,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-        if (!isLast) Divider(color: Colors.white.withValues(alpha: 0.06), height: 1, indent: 16, endIndent: 16),
+        if (!isLast) Divider(color: Colors.white.withOpacity(0.06), height: 1, indent: 16, endIndent: 16),
       ],
     );
   }
@@ -481,8 +481,8 @@ class _HomePageState extends State<HomePage> {
               CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.white10,
-                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                child: photoUrl == null ? const Icon(Icons.person, size: 16, color: Colors.white38) : null,
+                backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 16, color: Colors.white38) : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -498,7 +498,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        if (!isLast) Divider(color: Colors.white.withValues(alpha: 0.06), height: 1, indent: 16, endIndent: 16),
+        if (!isLast) Divider(color: Colors.white.withOpacity(0.06), height: 1, indent: 16, endIndent: 16),
       ],
     );
   }
@@ -520,9 +520,9 @@ class _HomePageState extends State<HomePage> {
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
         child: Row(
           children: [
@@ -544,13 +544,13 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(location, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(location, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Text(priceText, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
                       const SizedBox(width: 4),
-                      Text('• $category', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
+                      Text('• $category', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
                       const Spacer(),
                       const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
                       const SizedBox(width: 4),

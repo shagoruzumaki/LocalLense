@@ -5,7 +5,8 @@ import '../services/restaurant_service.dart';
 import '../model/restaurant.dart';
 
 class RankingPage extends StatefulWidget {
-  const RankingPage({super.key});
+  final int initialIndex;
+  const RankingPage({super.key, this.initialIndex = 0});
 
   @override
   State<RankingPage> createState() => _RankingPageState();
@@ -26,7 +27,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialIndex);
     _fetchData();
   }
 

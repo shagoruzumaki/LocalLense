@@ -56,8 +56,8 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
 
       final results = await Future.wait([
         _discoveryService.getNearby(lat: _userLat!, lng: _userLng!, radiusKm: 10),
-        _top10Service.getTop10Restaurants(filter: 'week'),
-        _top10Service.getTop10Critics(filter: 'week'),
+        _top10Service.getTop10Restaurants(filter: 'alltime'),
+        _top10Service.getTop10Critics(filter: 'alltime'),
       ]);
 
       if (mounted) {
@@ -135,7 +135,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
         title: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white10),
           ),
@@ -177,10 +177,10 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Search for dishes or places...',
-                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5)),
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      fillColor: Colors.white.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
@@ -334,7 +334,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
         margin: const EdgeInsets.only(right: 10),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withValues(alpha: 0.05),
+          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -352,7 +352,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white10),
       ),
@@ -429,7 +429,8 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
           CircleAvatar(
             radius: 20, 
             backgroundColor: Colors.white10,
-            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+            backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+            child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 16, color: Colors.white38) : null,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -450,9 +451,9 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.1),
+              color: const Color(0xFFFFD700).withOpacity(0.1),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
+              border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.3)),
             ),
             child: Text(
               level,
@@ -471,7 +472,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
         width: 250,
         margin: const EdgeInsets.only(right: 15),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
+          color: Colors.white.withOpacity(0.03),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white10),
         ),
