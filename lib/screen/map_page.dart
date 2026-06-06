@@ -10,7 +10,8 @@ import '../model/restaurant.dart';
 import '../utils/location_utils.dart';
 
 class MapPage extends StatefulWidget {
-  const MapPage({super.key});
+  final Restaurant? targetRestaurant;
+  const MapPage({super.key, this.targetRestaurant});
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -25,8 +26,8 @@ class _MapPageState extends State<MapPage> {
 
   List<RestaurantWithScore> _spots = [];
   LatLng _userLocation = const LatLng(23.8103, 90.4125); // Default: Dhaka
-
   bool _isLoading = true;
+  bool _isFollowingUser = true;
 
   @override
   void initState() {
@@ -34,47 +35,67 @@ class _MapPageState extends State<MapPage> {
     _initMap();
   }
 
-  // ─────────────────────────────
-  // INIT MAP + LIVE LOCATION
-  // ─────────────────────────────
   Future<void> _initMap() async {
     try {
       final permissionOk = await _locationService.checkPermission();
       final serviceOk = await _locationService.isServiceEnabled();
 
       if (!permissionOk || !serviceOk) {
-        throw Exception("Location permission/service not available");
+        throw Exception("Location services disabled or permission denied");
       }
 
-      // Get Initial location and move map to it
       final initialPos = await _locationService.getCurrentLocation();
+      
       if (mounted) {
         setState(() {
           _userLocation = initialPos;
+          _isLoading = false;
         });
-        _mapController.move(_userLocation, 14.0);
+
+        if (widget.targetRestaurant != null) {
+          // If we have a target, fit both on screen
+          _fitBounds();
+          _isFollowingUser = false; // Don't auto-follow if we're looking at a route
+        } else {
+          _mapController.move(_userLocation, 15.0);
+        }
       }
 
-      // Start live stream to update marker position
       _locationSubscription = _locationService.getLocationStream().listen((newLocation) {
         if (!mounted) return;
         setState(() {
           _userLocation = newLocation;
+          if (_isFollowingUser) {
+            _mapController.move(_userLocation, _mapController.camera.zoom);
+          }
         });
       });
 
       await _fetchSpots();
     } catch (e) {
-      debugPrint("Map initialization error: $e");
-      await _fetchSpots(); // Fetch anyway using default (Dhaka)
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Location Error: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _fetchSpots();
+      }
     }
   }
 
-  // ─────────────────────────────
-  // RESTAURANTS
-  // ─────────────────────────────
+  void _fitBounds() {
+    if (widget.targetRestaurant == null) return;
+    
+    final target = LatLng(widget.targetRestaurant!.latitude, widget.targetRestaurant!.longitude);
+    final bounds = LatLngBounds.fromPoints([_userLocation, target]);
+    
+    // Add some padding
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(50),
+      ),
+    );
+  }
+
   Future<void> _fetchSpots() async {
     try {
       final spots = await _discoveryService.getNearby(
@@ -82,19 +103,18 @@ class _MapPageState extends State<MapPage> {
         lng: _userLocation.longitude,
         radiusKm: 5.0,
       );
-
-      if (mounted) {
-        setState(() {
-          _spots = spots;
-        });
-      }
+      if (mounted) setState(() => _spots = spots);
     } catch (e) {
-      debugPrint("Restaurant fetch error: $e");
+      debugPrint("Fetch Error: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final target = widget.targetRestaurant != null 
+        ? LatLng(widget.targetRestaurant!.latitude, widget.targetRestaurant!.longitude) 
+        : null;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
@@ -104,25 +124,10 @@ class _MapPageState extends State<MapPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Explore Nearby',
-          style: TextStyle(
-            color: Color(0xFFFFD700),
-            fontWeight: FontWeight.bold,
-            fontFamily: 'serif',
-          ),
+        title: Text(
+          widget.targetRestaurant != null ? 'Directions' : 'Explore Nearby',
+          style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () {
-              setState(() => _isLoading = true);
-              _fetchSpots().then((_) {
-                if (mounted) setState(() => _isLoading = false);
-              });
-            },
-          )
-        ],
       ),
       body: Stack(
         children: [
@@ -130,28 +135,41 @@ class _MapPageState extends State<MapPage> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _userLocation,
-              initialZoom: 14,
+              initialZoom: 15,
+              onPositionChanged: (position, hasGesture) {
+                if (hasGesture && _isFollowingUser) {
+                  setState(() => _isFollowingUser = false);
+                }
+              },
             ),
             children: [
               TileLayer(
                 urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: const ['a', 'b', 'c'],
-                userAgentPackageName: 'com.local_lense.app',
-                tileBuilder: (context, tileWidget, tile) {
-                  return ColorFiltered(
-                    colorFilter: const ColorFilter.matrix([
-                      -1.0, 0.0, 0.0, 0.0, 255.0,
-                      0.0, -1.0, 0.0, 0.0, 255.0,
-                      0.0, 0.0, -1.0, 0.0, 255.0,
-                      0.0, 0.0, 0.0, 1.0, 0.0,
-                    ]),
-                    child: tileWidget,
-                  );
-                },
+                tileBuilder: (context, tileWidget, tile) => ColorFiltered(
+                  colorFilter: const ColorFilter.matrix([
+                    -1.0, 0.0, 0.0, 0.0, 255.0,
+                    0.0, -1.0, 0.0, 0.0, 255.0,
+                    0.0, 0.0, -1.0, 0.0, 255.0,
+                    0.0, 0.0, 0.0, 1.0, 0.0,
+                  ]),
+                  child: tileWidget,
+                ),
               ),
+              if (target != null)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: [_userLocation, target],
+                      color: const Color(0xFFFFD700),
+                      strokeWidth: 4,
+                      isDotted: true,
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
-                  // LIVE USER MARKER
+                  // User Marker
                   Marker(
                     point: _userLocation,
                     width: 40,
@@ -162,51 +180,109 @@ class _MapPageState extends State<MapPage> {
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.blue, width: 2),
                       ),
-                      child: const Icon(
-                        Icons.my_location,
-                        color: Colors.blue,
-                        size: 24,
-                      ),
+                      child: const Icon(Icons.my_location, color: Colors.blue, size: 24),
                     ),
                   ),
-
-                  // RESTAURANTS
-                  ..._spots.map((item) {
-                    final r = item.restaurant;
-                    final isOpen = item.isOpenNow;
-                    return Marker(
-                      point: LatLng(r.latitude, r.longitude),
-                      width: 45,
-                      height: 45,
-                      child: GestureDetector(
-                        onTap: () => _showRestaurantPopup(item),
-                        child: Icon(
-                          Icons.location_on,
-                          color: isOpen ? const Color(0xFFFFD700) : Colors.white38,
-                          size: 38,
-                        ),
+                  // Target Restaurant Marker (if any)
+                  if (widget.targetRestaurant != null)
+                    Marker(
+                      point: target!,
+                      width: 50,
+                      height: 50,
+                      child: const Icon(Icons.location_on, color: Color(0xFFFFD700), size: 45),
+                    ),
+                  // Other Nearby Restaurants
+                  ..._spots.where((s) => s.restaurant.id != widget.targetRestaurant?.id).map((item) => Marker(
+                    point: LatLng(item.restaurant.latitude, item.restaurant.longitude),
+                    width: 45,
+                    height: 45,
+                    child: GestureDetector(
+                      onTap: () => _showRestaurantPopup(item),
+                      child: Icon(
+                        Icons.location_on, 
+                        color: item.isOpenNow ? const Color(0xFFFFD700) : Colors.white38, 
+                        size: 38
                       ),
-                    );
-                  }),
+                    ),
+                  )),
                 ],
               ),
             ],
           ),
           if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFFFFD700),
+            const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+          
+          if (widget.targetRestaurant != null)
+            Positioned(
+              bottom: 100,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.restaurant, color: Color(0xFFFFD700)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.targetRestaurant!.name,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            widget.targetRestaurant!.address,
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.navigation_outlined, color: Color(0xFFFFD700)),
+                      onPressed: () => _restaurantService.openMapDirections(
+                        widget.targetRestaurant!.latitude, 
+                        widget.targetRestaurant!.longitude
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFFFD700),
-        foregroundColor: Colors.black,
-        child: const Icon(Icons.my_location),
-        onPressed: () {
-          _mapController.move(_userLocation, 15.0);
-        },
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (widget.targetRestaurant != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: FloatingActionButton(
+                heroTag: 'fit',
+                backgroundColor: Colors.white10,
+                child: const Icon(Icons.zoom_out_map, color: Colors.white),
+                onPressed: _fitBounds,
+              ),
+            ),
+          FloatingActionButton(
+            heroTag: 'location',
+            backgroundColor: _isFollowingUser ? Colors.blue : const Color(0xFFFFD700),
+            foregroundColor: Colors.black,
+            child: Icon(_isFollowingUser ? Icons.gps_fixed : Icons.my_location),
+            onPressed: () {
+              setState(() => _isFollowingUser = true);
+              _mapController.move(_userLocation, 15.0);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -286,16 +362,6 @@ class _MapPageState extends State<MapPage> {
                   ],
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              r.categoryDisplay.toUpperCase(),
-              style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, letterSpacing: 1.1),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              r.address,
-              style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
             const SizedBox(height: 24),
             Row(

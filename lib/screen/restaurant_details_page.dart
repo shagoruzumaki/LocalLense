@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/discovery_service.dart';
 import '../model/restaurant.dart';
+import 'map_page.dart';
 
 class RestaurantDetailsPage extends StatefulWidget {
   final String? restaurantId;
@@ -31,7 +32,6 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   Future<void> _fetchDetails(String id) async {
     setState(() => _isLoading = true);
     try {
-      // Use the service instead of the repository directly
       final detail = await _discoveryService.getRestaurantDetail(id);
       final score = await _discoveryService.getScoreBreakdown(id);
 
@@ -88,7 +88,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withValues(alpha: 0.3),
+                          Colors.black.withOpacity(0.3),
                           const Color(0xFF0D0D0D),
                         ],
                       ),
@@ -139,11 +139,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Score Breakdown from algorithm_scores table
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: Colors.white.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.white10),
                     ),
@@ -185,9 +184,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.05),
+                      color: const Color(0xFFFFD700).withOpacity(0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
+                      border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
                     ),
                     child: Text(
                       r.aiSummary ?? 'No AI summary available yet for this spot.',
@@ -207,13 +206,39 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   ],
                   _buildSectionHeader('Location & Hours'),
                   const SizedBox(height: 15),
-                  const Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, color: Color(0xFFFFD700), size: 20),
-                      SizedBox(width: 10),
-                      Text('Google Maps Directions', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
-                    ],
+                  
+                  // DIRECTIONS BUTTON
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MapPage(targetRestaurant: r),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, color: Color(0xFFFFD700), size: 20),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Google Maps Directions', 
+                            style: TextStyle(
+                              color: Color(0xFFFFD700), 
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            )
+                          ),
+                          const Spacer(),
+                          const Icon(Icons.chevron_right, color: Color(0xFFFFD700), size: 18),
+                        ],
+                      ),
+                    ),
                   ),
+                  
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -239,9 +264,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
+        border: Border.all(color: color.withOpacity(0.5)),
       ),
       child: Text(
         text,
