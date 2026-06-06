@@ -4,8 +4,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../services/location_service.dart';
+import '../services/discovery_service.dart';
 import '../services/restaurant_service.dart';
 import '../model/restaurant.dart';
+import '../utils/location_utils.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -15,12 +17,13 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
+  final DiscoveryService _discoveryService = DiscoveryService();
   final RestaurantService _restaurantService = RestaurantService();
   final MapController _mapController = MapController();
   final LocationService _locationService = LocationService();
   StreamSubscription<LatLng>? _locationSubscription;
 
-  List<Restaurant> _spots = [];
+  List<RestaurantWithScore> _spots = [];
   LatLng _userLocation = const LatLng(23.8103, 90.4125);
 
   bool _isLoading = true;
@@ -43,6 +46,14 @@ class _MapPageState extends State<MapPage> {
         throw Exception("Location permission/service not available");
       }
 
+      // Initial location
+      final initialPos = await _locationService.getCurrentLocation();
+      if (mounted) {
+        setState(() {
+          _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
+        });
+      }
+
       // LIVE STREAM
       _locationSubscription = _locationService.getLocationStream().listen((newLocation) {
         if (!mounted) return;
@@ -50,26 +61,27 @@ class _MapPageState extends State<MapPage> {
         setState(() {
           _userLocation = newLocation;
         });
-
-        // Uncomment if you want the map to follow the user automatically
-        // _mapController.move(newLocation, _mapController.camera.zoom);
       });
 
+      await _fetchSpots();
     } catch (e) {
-      debugPrint("Location error: $e");
+      debugPrint("Map initialization error: $e");
+      await _fetchSpots(); // Fetch anyway using fallback/current location
     }
-
-    await _fetchSpots();
   }
 
   // ─────────────────────────────
   // RESTAURANTS
   // ─────────────────────────────
   Future<void> _fetchSpots() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     try {
-      final spots = await _restaurantService.fetchNearbyRestaurants(
-        latitude: _userLocation.latitude,
-        longitude: _userLocation.longitude,
+      // Fetch real restaurants with scores from our discovery service
+      final spots = await _discoveryService.getNearby(
+        lat: _userLocation.latitude,
+        lng: _userLocation.longitude,
+        radiusKm: 5.0,
       );
 
       if (mounted) {
@@ -80,7 +92,6 @@ class _MapPageState extends State<MapPage> {
       }
     } catch (e) {
       debugPrint("Restaurant fetch error: $e");
-
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -97,6 +108,10 @@ class _MapPageState extends State<MapPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Explore Nearby',
           style: TextStyle(
@@ -117,53 +132,69 @@ class _MapPageState extends State<MapPage> {
       ),
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _userLocation,
-              initialZoom: 14,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c'],
-                userAgentPackageName: 'com.local_lense.app',
+          ColorFiltered(
+            // Dark mode filter for the map tiles
+            colorFilter: const ColorFilter.matrix([
+              -1.0, 0.0, 0.0, 0.0, 255.0,
+              0.0, -1.0, 0.0, 0.0, 255.0,
+              0.0, 0.0, -1.0, 0.0, 255.0,
+              0.0, 0.0, 0.0, 1.0, 0.0,
+            ]),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _userLocation,
+                initialZoom: 14,
               ),
-              MarkerLayer(
-                markers: [
-                  // USER MARKER
-                  Marker(
-                    point: _userLocation,
-                    width: 50,
-                    height: 50,
-                    child: const Icon(
-                      Icons.my_location,
-                      color: Colors.blue,
-                      size: 30,
-                    ),
-                  ),
-
-                  // RESTAURANTS
-                  ..._spots
-                      .where((r) => r.latitude != 0.0 && r.longitude != 0.0)
-                      .map((r) {
-                    return Marker(
-                      point: LatLng(r.latitude, r.longitude),
-                      width: 45,
-                      height: 45,
-                      child: GestureDetector(
-                        onTap: () => _showRestaurantPopup(r),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  subdomains: const ['a', 'b', 'c'],
+                  userAgentPackageName: 'com.local_lense.app',
+                ),
+                MarkerLayer(
+                  markers: [
+                    // USER MARKER
+                    Marker(
+                      point: _userLocation,
+                      width: 40,
+                      height: 40,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.blue, width: 2),
+                        ),
                         child: const Icon(
-                          Icons.location_on,
-                          color: Color(0xFFFFD700),
-                          size: 38,
+                          Icons.my_location,
+                          color: Colors.blue,
+                          size: 24,
                         ),
                       ),
-                    );
-                  }),
-                ],
-              ),
-            ],
+                    ),
+
+                    // RESTAURANTS
+                    ..._spots.map((item) {
+                      final r = item.restaurant;
+                      final isOpen = item.isOpenNow;
+                      return Marker(
+                        point: LatLng(r.latitude, r.longitude),
+                        width: 45,
+                        height: 45,
+                        child: GestureDetector(
+                          onTap: () => _showRestaurantPopup(item),
+                          child: Icon(
+                            Icons.location_on,
+                            color: isOpen ? const Color(0xFFFFD700) : Colors.white38,
+                            size: 38,
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ],
+            ),
           ),
           if (_isLoading)
             const Center(
@@ -179,7 +210,12 @@ class _MapPageState extends State<MapPage> {
   // ─────────────────────────────
   // POPUP
   // ─────────────────────────────
-  void _showRestaurantPopup(Restaurant r) {
+  void _showRestaurantPopup(RestaurantWithScore item) {
+    final r = item.restaurant;
+    final dist = item.distanceKm != null 
+        ? LocationUtils.formatDistance(item.distanceKm!) 
+        : "Nearby";
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -197,25 +233,62 @@ class _MapPageState extends State<MapPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    r.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'serif',
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        r.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'serif',
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: item.isOpenNow 
+                                  ? Colors.green.withValues(alpha: 0.2) 
+                                  : Colors.red.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              item.isOpenNow ? "OPEN NOW" : "CLOSED",
+                              style: TextStyle(
+                                color: item.isOpenNow ? Colors.green : Colors.redAccent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(dist, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  "৳" * r.priceTier,
-                  style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold),
+                Column(
+                  children: [
+                    Text(
+                      item.scoreLabel.toUpperCase(),
+                      style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      r.rating.toStringAsFixed(1),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              r.category.toUpperCase(),
+              r.categoryDisplay.toUpperCase(),
               style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, letterSpacing: 1.1),
             ),
             const SizedBox(height: 12),
@@ -224,21 +297,35 @@ class _MapPageState extends State<MapPage> {
               style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
             const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFD700),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFD700),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.restaurant_menu),
+                    label: const Text('VIEW DETAILS', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+                  ),
                 ),
-                icon: const Icon(Icons.directions),
-                label: const Text('GET DIRECTIONS', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  _restaurantService.openMapDirections(r.latitude, r.longitude);
-                },
-              ),
+                const SizedBox(width: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.directions, color: Color(0xFFFFD700)),
+                    onPressed: () {
+                      _restaurantService.openMapDirections(r.latitude, r.longitude);
+                    },
+                  ),
+                ),
+              ],
             )
           ],
         ),

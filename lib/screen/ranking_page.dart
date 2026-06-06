@@ -40,7 +40,6 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
         _locationName = await _restaurantService.getNeighbourhoodName(pos.latitude, pos.longitude);
       }
 
-      // If not alltime, we fetch once. If alltime, StreamBuilder handles it.
       if (_timeFilter != 'alltime') {
         final res = await _top10Service.getTop10Restaurants(filter: _timeFilter);
         final critics = await _top10Service.getTop10Critics(filter: _timeFilter);
@@ -52,7 +51,6 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
           });
         }
       } else {
-        // Just fetch critics for All Time if needed, or let stream handle it
         final critics = await _top10Service.getTop10Critics(filter: 'alltime');
         if (mounted) {
           setState(() {
@@ -68,7 +66,11 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
 
   void _setTimeFilter(String filter) {
     if (_timeFilter == filter) return;
-    setState(() => _timeFilter = filter);
+    setState(() {
+      _timeFilter = filter;
+      _isLoading = true;
+      _restaurants = []; // Reset list to show loading state
+    });
     _fetchData();
   }
 
@@ -87,7 +89,10 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Leaderboard', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif')),
-            Text('$_locationName • Updated ${_timeFilter == 'alltime' ? 'Real-time' : 'Weekly'}', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            Text(
+              '$_locationName • Updated ${_timeFilter == 'alltime' ? 'Real-time' : _timeFilter == 'week' ? 'Weekly' : 'Monthly'}', 
+              style: const TextStyle(color: Colors.white38, fontSize: 12)
+            ),
           ],
         ),
         bottom: TabBar(
@@ -207,12 +212,21 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
               score: r.rating.toStringAsFixed(1),
               description: r.aiSummary ?? "Highly rated culinary experience...",
               imageUrl: r.imageUrl,
+              onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
             ),
           );
         }
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: _buildRankItem((index + 1).toString(), r.name, r.address, r.aiSummary ?? "Outstanding service and taste.", imageUrl: r.imageUrl, score: r.rating.toStringAsFixed(1)),
+          child: _buildRankItem(
+            (index + 1).toString(), 
+            r.name, 
+            r.address, 
+            r.aiSummary ?? "Outstanding service and taste.", 
+            imageUrl: r.imageUrl, 
+            score: r.rating.toStringAsFixed(1),
+            onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+          ),
         );
       },
     );
@@ -267,121 +281,134 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildRankOneCard({required String name, required String location, required String score, required String description, required String imageUrl}) {
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(colors: [Color(0xFFFFD700), Colors.transparent]),
-      ),
+  Widget _buildRankOneCard({
+    required String name, 
+    required String location, 
+    required String score, 
+    required String description, 
+    required String imageUrl,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(colors: [Color(0xFFFFD700), Colors.transparent]),
         ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const Text('1', style: TextStyle(color: Color(0xFFFFD700), fontSize: 48, fontWeight: FontWeight.bold, fontFamily: 'serif')),
-                    Positioned(
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: const Color(0xFF2A2A2A), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFFFD700), width: 1)),
-                        child: const Icon(Icons.stars, color: Color(0xFFFFD700), size: 12),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(imageUrl, width: 80, height: 80, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.white10, width: 80, height: 80)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Text(name, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                            child: Text(score, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
+                      const Text('1', style: TextStyle(color: Color(0xFFFFD700), fontSize: 48, fontWeight: FontWeight.bold, fontFamily: 'serif')),
+                      Positioned(
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: const Color(0xFF2A2A2A), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFFFD700), width: 1)),
+                          child: const Icon(Icons.stars, color: Color(0xFFFFD700), size: 12),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(location, style: const TextStyle(color: Colors.white54, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 8),
-                      Text(description, style: const TextStyle(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
                     ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text('View Details', style: TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
-                Icon(Icons.chevron_right, color: Color(0xFFFFD700), size: 18),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(imageUrl, width: 80, height: 80, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.white10, width: 80, height: 80)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(name, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                              child: Text(score, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(location, style: const TextStyle(color: Colors.white54, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 8),
+                        Text(description, style: const TextStyle(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text('View Details', style: TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
+                  Icon(Icons.chevron_right, color: Color(0xFFFFD700), size: 18),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildRankItem(String rank, String name, String location, String description, {String? imageUrl, String? score}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 30,
-            child: Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'serif')),
-          ),
-          const SizedBox(width: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: imageUrl != null 
-              ? Image.network(imageUrl, width: 60, height: 60, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.white10, width: 60, height: 60))
-              : Container(width: 60, height: 60, color: Colors.white10),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    if (score != null) Text(score, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Text(location, style: const TextStyle(color: Colors.white54, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(description, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
+  Widget _buildRankItem(String rank, String name, String location, String description, {String? imageUrl, String? score, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 30,
+              child: Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'serif')),
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: imageUrl != null 
+                ? Image.network(imageUrl, width: 60, height: 60, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.white10, width: 60, height: 60))
+                : Container(width: 60, height: 60, color: Colors.white10),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      if (score != null) Text(score, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Text(location, style: const TextStyle(color: Colors.white54, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(description, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
