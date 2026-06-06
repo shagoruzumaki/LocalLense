@@ -4,6 +4,7 @@ import 'home_page.dart';
 import 'ForgotPassword_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_lense/services/auth_services.dart';
+import 'package:local_lense/services/notification_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -76,7 +77,6 @@ class _LoginPageState extends State<LoginPage> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () {
-                    print("Button blocked");
                     Navigator.push(context,
                       MaterialPageRoute(builder: (context)=> const ForgotPasswordPage()
                     ),
@@ -103,6 +103,8 @@ class _LoginPageState extends State<LoginPage> {
                     if (!mounted) return;
 
                     if (result.user != null) {
+                      // Save FCM token immediately after login
+                      await NotificationService.updateToken();
 
                       Navigator.pushReplacement(
                         context,

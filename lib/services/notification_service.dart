@@ -29,39 +29,88 @@ class NotificationService {
     await _localNotifications.initialize(
       settings,
       onDidReceiveNotificationResponse: (details) {
-        debugPrint("Notification tapped: ${details.payload}");
+        _handleNotificationClick(details.payload);
       },
     );
 
-    // 3. Update Supabase with FCM Token
-    try {
-      final token = await _fcm.getToken();
-      if (token != null) {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
-          await Supabase.instance.client
-              .from('users')
-              .update({'fcm_token': token})
-              .eq('id', user.id);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error updating FCM token: $e');
-    }
+    // 3. Save/Update FCM Token
+    await updateToken();
 
-    // 4. Handle background messages
+    // 4. Listen for token refreshes
+    _fcm.onTokenRefresh.listen((newToken) => updateToken(newToken));
+
+    // 5. Handle background messages
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 5. Handle foreground messages
+    // 6. Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
         showNotification(
           title: message.notification!.title ?? '',
           body: message.notification!.body ?? '',
-          payload: message.data.toString(),
+          payload: message.data['type'] ?? 'general',
         );
       }
     });
+
+    // 7. Handle notification taps (Background & Terminated state)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _handleNotificationClick(message.data['type']);
+    });
+
+    _fcm.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null) {
+        _handleNotificationClick(message.data['type']);
+      }
+    });
+  }
+
+  /// Updates the FCM token in Supabase for the current user
+  static Future<void> updateToken([String? token]) async {
+    try {
+      final fcmToken = token ?? await _fcm.getToken();
+      if (fcmToken == null) return;
+
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await Supabase.instance.client
+            .from('users')
+            .update({'fcm_token': fcmToken})
+            .eq('id', user.id);
+        debugPrint('FCM Token updated successfully');
+      }
+    } catch (e) {
+      debugPrint('Error updating FCM token: $e');
+    }
+  }
+
+  /// Handles routing/logic for specific notification types
+  static void _handleNotificationClick(String? type) {
+    if (type == null) return;
+    
+    debugPrint("Notification Clicked with Type: $type");
+    
+    // logic based on specific types
+    switch (type) {
+      case 'tier_upgrade':
+        // Navigate to Profile or Badge page
+        break;
+      case 'reward_unlocked':
+        // Navigate to Rewards page
+        break;
+      case 'verification':
+        // Navigate to Verification status page
+        break;
+      case 'top10_updated':
+      case 'nearby_top10':
+        // Navigate to Rankings page
+        break;
+      case 'review_voted':
+        // Navigate to the specific review or notification center
+        break;
+      default:
+        debugPrint("Unhandled notification type: $type");
+    }
   }
 
   /// Show a local notification
