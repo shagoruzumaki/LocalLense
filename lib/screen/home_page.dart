@@ -24,11 +24,19 @@ class _HomePageState extends State<HomePage> {
   late Future<List<Map<String, dynamic>>> _top10CriticsFuture;
   
   String _neighbourhood = 'Nearby';
+  double? _userLat;
+  double? _userLng;
+
+  // Search State
+  final TextEditingController _searchController = TextEditingController();
+  List<RestaurantWithScore> _searchResults = [];
+  bool _isSearching = false;
+  bool _isLoadingSearch = false;
+  SortOption _currentSort = SortOption.score;
 
   @override
   void initState() {
     super.initState();
-    // Initialize futures immediately
     _top10RestaurantsFuture = _top10Service.getTop10Restaurants(filter: 'alltime');
     _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'alltime');
     _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: 23.8103, lng: 90.4125, radiusKm: 10);
@@ -45,6 +53,8 @@ class _HomePageState extends State<HomePage> {
         final pos = await _locationService.getCurrentLocation();
         lat = pos.latitude;
         lng = pos.longitude;
+        _userLat = lat;
+        _userLng = lng;
         final name = await _restaurantService.getNeighbourhoodName(lat, lng);
         if (mounted) setState(() => _neighbourhood = name);
       }
@@ -53,10 +63,41 @@ class _HomePageState extends State<HomePage> {
     if (mounted) {
       setState(() {
         _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: lat, lng: lng, radiusKm: 10);
-        // Using 'alltime' for Home Page to ensure data shows up even if no recent activity
         _top10RestaurantsFuture = _top10Service.getTop10Restaurants(filter: 'alltime');
         _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'alltime');
       });
+    }
+  }
+
+  Future<void> _performSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _isSearching = false;
+        _searchResults = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _isLoadingSearch = true;
+    });
+
+    try {
+      final results = await _discoveryService.searchRestaurants(
+        query, 
+        lat: _userLat, 
+        lng: _userLng,
+        sortBy: _currentSort,
+      );
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _isLoadingSearch = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingSearch = false);
     }
   }
 
@@ -124,12 +165,24 @@ class _HomePageState extends State<HomePage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: TextField(
-                    readOnly: true,
-                    onTap: () => Navigator.pushNamed(context, '/discover'),
+                    controller: _searchController,
+                    onChanged: _performSearch,
                     decoration: InputDecoration(
                       hintText: 'Search for dishes or places...',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
                       prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
+                      suffixIcon: _isSearching 
+                        ? IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white54),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _isSearching = false;
+                                _searchResults = [];
+                              });
+                            },
+                          )
+                        : null,
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.05),
                       border: OutlineInputBorder(
@@ -140,192 +193,27 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
 
-                const SizedBox(height: 30),
-
-                // ══════════════════════════════════════════
-                // TOP 10 RESTAURANTS SECTION
-                // ══════════════════════════════════════════
-                _buildSectionHeader('🏆', 'Top Ranked', 'Best of all time in $_neighbourhood'),
-                const SizedBox(height: 14),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
-                    ),
-                    child: FutureBuilder<List<Restaurant>>(
-                      future: _top10RestaurantsFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const SizedBox(height: 150, child: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))));
-                        }
-                        
-                        final topList = snapshot.data ?? [];
-                        final displayList = topList.take(10).toList();
-
-                        return Column(
-                          children: [
-                            _buildListHeader('Top 10 Restaurants', Icons.auto_awesome),
-                            const Divider(color: Colors.white10, height: 1),
-                            if (displayList.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(20),
-                                child: Text('No rankings available', style: TextStyle(color: Colors.white38)),
-                              )
-                            else
-                              ...displayList.asMap().entries.map((entry) {
-                                int idx = entry.key;
-                                Restaurant r = entry.value;
-                                return _buildTop10RestaurantRow(
-                                  rank: '#${idx + 1}',
-                                  name: r.name,
-                                  category: r.categoryDisplay,
-                                  rating: r.rating.toStringAsFixed(1),
-                                  imageUrl: r.imageUrl,
-                                  isLast: idx == displayList.length - 1,
-                                  onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
-                                );
-                              }),
-                            _buildSeeMoreButton('See Full List', () => Navigator.pushNamed(context, '/ranking')),
-                          ],
-                        );
-                      },
+                if (_isSearching) ...[
+                  const SizedBox(height: 15),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        _buildSortChip('Best Score', SortOption.score),
+                        const SizedBox(width: 10),
+                        _buildSortChip('Nearest', SortOption.nearest),
+                        const SizedBox(width: 10),
+                        _buildSortChip('Budget', SortOption.budget),
+                      ],
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ══════════════════════════════════════════
-                // TOP 10 CRITICS SECTION
-                // ══════════════════════════════════════════
-                _buildSectionHeader('💎', 'Elite Critics', 'Most helpful reviewers'),
-                const SizedBox(height: 14),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
-                    ),
-                    child: FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _top10CriticsFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))));
-                        }
-                        
-                        final critics = snapshot.data ?? [];
-                        final displayCritics = critics.take(10).toList();
-
-                        return Column(
-                          children: [
-                            _buildListHeader('Top 10 Critics', Icons.verified_user_outlined),
-                            const Divider(color: Colors.white10, height: 1),
-                            if (displayCritics.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(20),
-                                child: Text('No critics ranked yet', style: TextStyle(color: Colors.white38)),
-                              )
-                            else
-                              ...displayCritics.asMap().entries.map((entry) {
-                                int idx = entry.key;
-                                var c = entry.value;
-                                return _buildTop10CriticRow(
-                                  rank: '#${idx + 1}',
-                                  name: c['name'] ?? 'Critic',
-                                  tier: (c['tier'] ?? 'EXPLORER').toString().toUpperCase(),
-                                  points: '${c['rank_score'] ?? 0} Pts',
-                                  photoUrl: c['profile_photo_url'],
-                                  isLast: idx == displayCritics.length - 1,
-                                );
-                              }),
-                            _buildSeeMoreButton('View Leaderboard', () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const RankingPage(initialIndex: 1),
-                                ),
-                              );
-                            }),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                // ── Found Near You ───────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.circle, color: Colors.green, size: 10),
-                          SizedBox(width: 6),
-                          Text(
-                            'Found Near You',
-                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
-                          ),
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pushNamed(context, '/discover'),
-                        child: Text(
-                          'SEE ALL',
-                          style: TextStyle(
-                            color: const Color(0xFFFFD700).withOpacity(0.8),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 15),
-                FutureBuilder<List<RestaurantWithScore>>(
-                  future: _nearbyRestaurantsFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFFFFD700))));
-                    }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(child: Text('No real spots found nearby', style: TextStyle(color: Colors.white38)));
-                    }
-
-                    final data = snapshot.data!;
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: data.length > 5 ? 5 : data.length,
-                      itemBuilder: (context, index) {
-                        final item = data[index];
-                        final r = item.restaurant;
-                        return _buildOpenNowItem(
-                          context: context,
-                          title: r.name,
-                          location: r.address,
-                          priceText: '৳' * r.priceTier,
-                          category: r.categoryDisplay,
-                          rating: r.rating.toStringAsFixed(1),
-                          imageUrl: r.imageUrl,
-                          scoreLabel: item.scoreLabel.toUpperCase(),
-                          onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
-                        );
-                      },
-                    );
-                  },
-                ),
+                  const SizedBox(height: 20),
+                  _buildSearchResults(),
+                ] else ...[
+                  const SizedBox(height: 30),
+                  _buildMainContent(),
+                ],
                 const SizedBox(height: 100),
               ],
             ),
@@ -353,6 +241,259 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSortChip(String label, SortOption option) {
+    final isSelected = _currentSort == option;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _currentSort = option);
+        _performSearch(_searchController.text);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.white12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.white,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResults() {
+    if (_isLoadingSearch) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(color: Color(0xFFFFD700)),
+        ),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: Text('No results found', style: TextStyle(color: Colors.white38)),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final item = _searchResults[index];
+        final r = item.restaurant;
+        return _buildOpenNowItem(
+          context: context,
+          title: r.name,
+          location: r.address,
+          priceText: '৳' * r.priceTier,
+          category: r.categoryDisplay,
+          rating: r.rating.toStringAsFixed(1),
+          imageUrl: r.imageUrl,
+          scoreLabel: item.scoreLabel.toUpperCase(),
+          distance: item.distanceKm,
+          onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+        );
+      },
+    );
+  }
+
+  Widget _buildMainContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // TOP 10 RESTAURANTS SECTION
+        _buildSectionHeader('🏆', 'Top Ranked', 'Best of all time in $_neighbourhood'),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: FutureBuilder<List<Restaurant>>(
+              future: _top10RestaurantsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(height: 150, child: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))));
+                }
+                final topList = snapshot.data ?? [];
+                final displayList = topList.take(10).toList();
+                return Column(
+                  children: [
+                    _buildListHeader('Top 10 Restaurants', Icons.auto_awesome),
+                    const Divider(color: Colors.white10, height: 1),
+                    if (displayList.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('No rankings available', style: TextStyle(color: Colors.white38)),
+                      )
+                    else
+                      ...displayList.asMap().entries.map((entry) {
+                        int idx = entry.key;
+                        Restaurant r = entry.value;
+                        return _buildTop10RestaurantRow(
+                          rank: '#${idx + 1}',
+                          name: r.name,
+                          category: r.categoryDisplay,
+                          rating: r.rating.toStringAsFixed(1),
+                          imageUrl: r.imageUrl,
+                          isLast: idx == displayList.length - 1,
+                          onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+                        );
+                      }),
+                    _buildSeeMoreButton('See Full List', () => Navigator.pushNamed(context, '/ranking')),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // TOP 10 CRITICS SECTION
+        _buildSectionHeader('💎', 'Elite Critics', 'Most helpful reviewers'),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _top10CriticsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))));
+                }
+                final critics = snapshot.data ?? [];
+                final displayCritics = critics.take(10).toList();
+                return Column(
+                  children: [
+                    _buildListHeader('Top 10 Critics', Icons.verified_user_outlined),
+                    const Divider(color: Colors.white10, height: 1),
+                    if (displayCritics.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('No critics ranked yet', style: TextStyle(color: Colors.white38)),
+                      )
+                    else
+                      ...displayCritics.asMap().entries.map((entry) {
+                        int idx = entry.key;
+                        var c = entry.value;
+                        return _buildTop10CriticRow(
+                          rank: '#${idx + 1}',
+                          name: c['name'] ?? 'Critic',
+                          tier: (c['tier'] ?? 'EXPLORER').toString().toUpperCase(),
+                          points: '${c['rank_score'] ?? 0} Pts',
+                          photoUrl: c['profile_photo_url'],
+                          isLast: idx == displayCritics.length - 1,
+                        );
+                      }),
+                    _buildSeeMoreButton('View Leaderboard', () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const RankingPage(initialIndex: 1),
+                        ),
+                      );
+                    }),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 30),
+
+        // Found Near You
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.circle, color: Colors.green, size: 10),
+                  SizedBox(width: 6),
+                  Text(
+                    'Found Near You',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/discover'),
+                child: Text(
+                  'SEE ALL',
+                  style: TextStyle(
+                    color: const Color(0xFFFFD700).withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 15),
+        FutureBuilder<List<RestaurantWithScore>>(
+          future: _nearbyRestaurantsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFFFFD700))));
+            }
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const Center(child: Text('No real spots found nearby', style: TextStyle(color: Colors.white38)));
+            }
+            final data = snapshot.data!;
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: data.length > 5 ? 5 : data.length,
+              itemBuilder: (context, index) {
+                final item = data[index];
+                final r = item.restaurant;
+                return _buildOpenNowItem(
+                  context: context,
+                  title: r.name,
+                  location: r.address,
+                  priceText: '৳' * r.priceTier,
+                  category: r.categoryDisplay,
+                  rating: r.rating.toStringAsFixed(1),
+                  imageUrl: r.imageUrl,
+                  scoreLabel: item.scoreLabel.toUpperCase(),
+                  distance: item.distanceKm,
+                  onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+                );
+              },
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -512,6 +653,7 @@ class _HomePageState extends State<HomePage> {
     required String rating,
     required String imageUrl,
     required String scoreLabel,
+    double? distance,
     VoidCallback? onTap,
   }) {
     return GestureDetector(
@@ -551,6 +693,12 @@ class _HomePageState extends State<HomePage> {
                       Text(priceText, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
                       const SizedBox(width: 4),
                       Text('• $category', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                      if (distance != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.near_me, color: Colors.white38, size: 10),
+                        const SizedBox(width: 4),
+                        Text('${distance.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      ],
                       const Spacer(),
                       const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
                       const SizedBox(width: 4),

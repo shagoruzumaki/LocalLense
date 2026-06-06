@@ -9,6 +9,7 @@ import 'package:local_lense/screen/profile_page.dart';
 import 'package:local_lense/screen/map_page.dart';
 import 'package:local_lense/screen/splash_screen.dart';
 import 'package:local_lense/screen/landing_page.dart';
+import 'package:local_lense/screen/search_page.dart';
 import 'package:local_lense/services/notification_service.dart';
 import 'package:local_lense/view/auth_gate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -75,6 +76,7 @@ class MyApp extends StatelessWidget {
         '/forgot-password': (_) => const ForgotPasswordPage(),
         '/reset-password': (_) => const ResetPasswordPage(),
         '/discover': (_) => const DiscoverPage(),
+        '/search': (_) => const SearchPage(),
         '/profile': (_) => const ProfilePage(),
         '/ranking': (_) => const RankingPage(),
         '/map': (_) => const MapPage(),

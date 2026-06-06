@@ -219,7 +219,7 @@ class RestaurantFilters {
   );
 }
 
-enum SortOption { score, nearest, budget }
+enum SortOption { score, nearest, budget, popular }
 
 enum SuggestionType { restaurant, tag }
 

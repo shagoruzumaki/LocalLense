@@ -4,8 +4,8 @@ import '../repository/discovery_repository.dart';
 class DiscoveryService {
   final DiscoveryRepository _repository = DiscoveryRepository();
 
-  Future<List<RestaurantWithScore>> searchRestaurants(String query, {double? lat, double? lng}) async {
-    return _repository.searchRestaurants(query, userLat: lat, userLng: lng);
+  Future<List<RestaurantWithScore>> searchRestaurants(String query, {double? lat, double? lng, SortOption sortBy = SortOption.score}) async {
+    return _repository.searchRestaurants(query, userLat: lat, userLng: lng, sortBy: sortBy);
   }
 
   Future<List<RestaurantWithScore>> getRanked({double? lat, double? lng, int? limit}) async {
