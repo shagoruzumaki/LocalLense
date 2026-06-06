@@ -54,6 +54,15 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const SplashScreen(),
+      onGenerateRoute: (settings) {
+        if (settings.name == '/restaurant-details') {
+          final restaurantId = settings.arguments as String;
+          return MaterialPageRoute(
+            builder: (context) => RestaurantDetailsPage(restaurantId: restaurantId),
+          );
+        }
+        return null; // Let 'routes' handle other routes
+      },
       routes: {
         '/landing': (_) => const LandingPage(),
         '/auth': (_) => AuthGate(
@@ -68,7 +77,6 @@ class MyApp extends StatelessWidget {
         '/discover': (_) => const DiscoverPage(),
         '/profile': (_) => const ProfilePage(),
         '/ranking': (_) => const RankingPage(),
-        '/restaurant-details': (_) => const RestaurantDetailsPage(),
         '/map': (_) => const MapPage(),
         '/home': (_) => const HomePage(),
         '/verification': (_) => const VerificationPage(),

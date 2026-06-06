@@ -349,11 +349,6 @@ class ReviewApi {
       'ai_tags': response['ai_tags'] ?? [],
     };
   }
-
-  // ─────────────────────────────────────────────
-  // 9. GET /users/:id/reviews
-  // All reviews by a user.
-  // ─────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> getUserReviews(String userId) async {
     final response = await _supabase
         .from('reviews')
@@ -369,6 +364,15 @@ class ReviewApi {
         .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────────
+  // PUBLIC WRAPPER: Recalculate score
+  // Called by AdminApi when a review is removed by admin
+  // Exposes _recalculateScore() without duplicating logic
+  // ─────────────────────────────────────────────
+  Future<void> recalculateScorePublic(String restaurantId) async {
+    await _recalculateScore(restaurantId);
   }
 
   // ─────────────────────────────────────────────
