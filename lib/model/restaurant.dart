@@ -15,6 +15,7 @@ class Restaurant {
   final String? aiSummary;
   final List<String>? aiTags;
   final double? algorithmScore;
+  final double? ratingFromSupabase;
   final bool active;
   final DateTime? scoreUpdatedAt;
 
@@ -31,6 +32,7 @@ class Restaurant {
     this.aiSummary,
     this.aiTags,
     this.algorithmScore,
+    this.ratingFromSupabase,
     this.active = true,
     this.scoreUpdatedAt,
   });
@@ -39,10 +41,32 @@ class Restaurant {
   double? get lat => latitude;
   double? get lng => longitude;
   double get lensScore => algorithmScore ?? 0.0;
-  double get rating => algorithmScore != null ? (algorithmScore! / 20.0) : 4.0;
+  
+  /// Star rating (1-5). Used for both display and sorting.
+  /// Priority: 1. Algorithm Score (converted), 2. DB Rating, 3. Default 4.0
+  double get rating {
+    double r = 4.0;
+    if (algorithmScore != null && algorithmScore! > 0) {
+      r = algorithmScore! / 20.0;
+    } else if (ratingFromSupabase != null && ratingFromSupabase! > 0) {
+      r = ratingFromSupabase!;
+    }
+    // Return a stable double for comparison
+    return double.parse(r.toStringAsFixed(1));
+  }
+
   String get imageUrl => (photos != null && photos!.isNotEmpty)
       ? photos!.first
       : 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=400&auto=format&fit=crop';
+
+  String get categoryDisplay {
+    if (category.isEmpty) return 'Restaurant';
+    // Convert snake_case to Title Case
+    return category.split('_').map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
 
   factory Restaurant.fromSupabase(Map<String, dynamic> json) {
     return Restaurant(
@@ -62,6 +86,7 @@ class Restaurant {
       aiSummary: json['ai_summary'],
       aiTags: json['ai_tags'] != null ? List<String>.from(json['ai_tags']) : null,
       algorithmScore: (json['algorithm_score'] as num?)?.toDouble(),
+      ratingFromSupabase: (json['rating'] as num?)?.toDouble(),
       active: json['active'] ?? true,
       scoreUpdatedAt: json['score_updated_at'] != null
           ? DateTime.parse(json['score_updated_at'])
@@ -78,7 +103,7 @@ class Restaurant {
     return Restaurant(
       id: json['id'].toString(),
       name: tags['name'] ?? 'Local Eatery',
-      category: tags['cuisine']?.toString().toUpperCase() ?? 'RESTAURANT',
+      category: tags['cuisine']?.toString().toLowerCase() ?? 'restaurant',
       address: tags['addr:street'] ?? 'Nearby Dhaka',
       latitude: lat,
       longitude: lon,
@@ -91,17 +116,18 @@ class Restaurant {
     final location = json['geometry']?['location'] ?? {};
     double lat = location['lat']?.toDouble() ?? 0.0;
     double lon = location['lng']?.toDouble() ?? 0.0;
-    double rating = (json['rating'] ?? 0.0).toDouble();
+    double ratingValue = (json['rating'] ?? 0.0).toDouble();
 
     return Restaurant(
       id: json['place_id'] ?? '',
       name: json['name'] ?? 'Unknown Spot',
-      category: (json['types'] as List?)?.first?.toString().replaceAll('_', ' ').toUpperCase() ?? 'RESTAURANT',
+      category: (json['types'] as List?)?.first?.toString().toLowerCase() ?? 'restaurant',
       address: json['vicinity'] ?? json['formatted_address'] ?? 'Address Hidden',
       latitude: lat,
       longitude: lon,
       priceTier: json['price_level'] ?? 2,
-      algorithmScore: rating * 20.0,
+      algorithmScore: ratingValue * 20.0,
+      ratingFromSupabase: ratingValue,
     );
   }
 }
@@ -140,7 +166,6 @@ class AlgorithmScore {
   }
 }
 
-/// Combined model returned to the UI layer
 class RestaurantWithScore {
   final Restaurant restaurant;
   final AlgorithmScore? score;
@@ -165,7 +190,6 @@ class RestaurantWithScore {
   String get priceDisplay => "৳" * restaurant.priceTier;
 }
 
-/// Filter options for Discovery API
 class RestaurantFilters {
   final String? category;
   final int? priceTier;

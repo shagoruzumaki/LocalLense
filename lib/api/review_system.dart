@@ -351,6 +351,25 @@ class ReviewApi {
   }
 
   // ─────────────────────────────────────────────
+  // 9. GET /users/:id/reviews
+  // All reviews by a user.
+  // ─────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getUserReviews(String userId) async {
+    final response = await _supabase
+        .from('reviews')
+        .select('''
+          *,
+          restaurants (
+            name
+          )
+        ''')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────────
   // PRIVATE HELPER: Recalculate restaurant score
   // Fetches all reviews → builds ReviewInput list →
   // calls RestaurantScoreCalculator.calculate() →

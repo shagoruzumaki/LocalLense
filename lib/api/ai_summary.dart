@@ -1,7 +1,6 @@
-
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../constant.dart'; // API keys
+import '../utils/app_constants.dart'; // Updated import
 import 'package:http/http.dart' as http;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,7 +18,7 @@ class AiSummaryApi {
   static const String _geminiEndpoint =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
-  // API key loaded from .env file
+  // API key loaded from AppConstants
   String get _geminiApiKey => AppConstants.geminiApiKey;
 
   // ─────────────────────────────────────────────
@@ -106,8 +105,9 @@ class AiSummaryApi {
   // STEP 2: Call Gemini 1.5 Flash API
   // ─────────────────────────────────────────────
   Future<String?> _callGemini(List<String> reviewBodies) async {
-    if (_geminiApiKey.isEmpty) {
-      throw Exception('GEMINI_API_KEY not found in .env file');
+    if (_geminiApiKey.isEmpty || _geminiApiKey == 'YOUR_GEMINI_API_KEY') {
+      debugPrint('[AiSummaryApi] Gemini API key not configured.');
+      return null;
     }
 
     // Build the prompt — same structure as the backend doc specifies

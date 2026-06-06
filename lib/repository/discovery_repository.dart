@@ -10,7 +10,6 @@ class DiscoveryRepository {
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<RestaurantWithScore>> getRestaurants(RestaurantFilters filters) async {
     try {
-      // Use dynamic to allow switching between PostgrestFilterBuilder and PostgrestTransformBuilder
       dynamic query = _db.from('restaurants').select();
 
       query = query.eq('active', true);
@@ -27,7 +26,7 @@ class DiscoveryRepository {
         query = query.order('algorithm_score', ascending: false, nullsFirst: false);
       }
 
-      final List response = await query;
+      final List response = await query.limit(50); // Added safety limit
       final restaurants = response.map((json) => Restaurant.fromSupabase(json)).toList();
 
       final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
@@ -124,7 +123,7 @@ class DiscoveryRepository {
       if (matchingReviews.isNotEmpty) {
         final ids = matchingReviews.map((r) => r['restaurant_id'].toString()).toSet().toList();
         final List byDishRes = await _db.from('restaurants').select()
-            .eq('active', true).inFilter('id', ids);
+            .eq('active', true).inFilter('id', ids); 
         byDish = byDishRes.map((j) => Restaurant.fromSupabase(j)).toList();
       }
 
@@ -190,7 +189,8 @@ class DiscoveryRepository {
 
   Future<List<RestaurantWithScore>> getNearby({required double userLat, required double userLng, double radiusKm = 2.0, bool openNow = false, int limit = 20}) async {
     try {
-      final List response = await _db.from('restaurants').select().eq('active', true).order('algorithm_score', ascending: false, nullsFirst: false);
+      // Fetch a healthy pool to calculate distance from
+      final List response = await _db.from('restaurants').select().eq('active', true).limit(100);
       final restaurants = response.map((json) => Restaurant.fromSupabase(json)).toList();
       final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
       var result = _enrich(restaurants, scores, userLat, userLng).where((item) => (item.distanceKm ?? double.maxFinite) <= radiusKm).toList();
@@ -202,7 +202,7 @@ class DiscoveryRepository {
 
   Future<Map<String, AlgorithmScore>> _fetchScores(List<String> ids) async {
     if (ids.isEmpty) return {};
-    final List response = await _db.from('algorithm_scores').select().inFilter('restaurant_id', ids);
+    final List response = await _db.from('algorithm_scores').select().inFilter('restaurant_id', ids); 
     return { for (var json in response) json['restaurant_id'].toString(): AlgorithmScore.fromSupabase(json) };
   }
 

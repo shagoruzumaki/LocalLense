@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:local_lense/screen/ForgotPassword_page.dart';
 import 'package:local_lense/screen/ResetPassword_page.dart';
 import 'package:local_lense/screen/discover_page.dart';
@@ -8,6 +9,7 @@ import 'package:local_lense/screen/profile_page.dart';
 import 'package:local_lense/screen/map_page.dart';
 import 'package:local_lense/screen/splash_screen.dart';
 import 'package:local_lense/screen/landing_page.dart';
+import 'package:local_lense/services/notification_service.dart';
 import 'package:local_lense/view/auth_gate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_lense/screen/signup_page.dart';
@@ -16,10 +18,21 @@ import 'package:local_lense/screen/restaurant_details_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Supabase
   await Supabase.initialize(
     url: 'https://bevgjdxwozuezcunizho.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
   );
+
+  // Initialize Firebase (Requires google-services.json on Android / GoogleService-Info.plist on iOS)
+  try {
+    await Firebase.initializeApp();
+    await NotificationService.init();
+  } catch (e) {
+    debugPrint("Firebase initialization failed: $e");
+  }
+
   runApp(const MyApp());
 }
 
@@ -39,7 +52,6 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      // Setting SplashScreen as the initial screen
       home: const SplashScreen(),
       routes: {
         '/landing': (_) => const LandingPage(),
@@ -56,7 +68,7 @@ class MyApp extends StatelessWidget {
         '/profile': (_) => const ProfilePage(),
         '/ranking': (_) => const RankingPage(),
         '/restaurant-details': (_) => const RestaurantDetailsPage(),
-        '/map': (_) => const MapPage(), // Removed const here
+        '/map': (_) => const MapPage(),
         '/home': (_) => const HomePage(),
       },
     );
