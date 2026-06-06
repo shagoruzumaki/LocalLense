@@ -158,7 +158,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Score and Actions
+                      // Score Card
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -235,7 +235,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                         ],
                       ),
                       const SizedBox(height: 25),
-                      // Community Summary
+                      // AI Summary
                       _buildSectionHeader('Community Summary'),
                       const SizedBox(height: 10),
                       Container(
@@ -279,16 +279,6 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                                   fit: BoxFit.cover,
                                 ),
                               ),
-                              alignment: Alignment.center,
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.black45,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: const Color(0xFFFFD700), width: 2),
-                                ),
-                                child: const Icon(Icons.navigation, color: Color(0xFFFFD700), size: 30),
-                              ),
                             ),
                             const SizedBox(height: 15),
                             Row(
@@ -296,21 +286,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                                 const Icon(Icons.location_on_outlined, color: Color(0xFFFFD700), size: 20),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(r.address, style: const TextStyle(color: Colors.white)),
-                                      const Text(
-                                        'Google Maps Directions', 
-                                        style: TextStyle(
-                                          color: Color(0xFFFFD700), 
-                                          fontWeight: FontWeight.bold,
-                                          decoration: TextDecoration.underline,
-                                          fontSize: 13,
-                                        )
-                                      ),
-                                    ],
-                                  ),
+                                  child: Text(r.address, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                                 ),
                               ],
                             ),
@@ -350,9 +326,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 ),
               ),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // Navigate to write review screen
-                },
+                onPressed: () {},
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Write a Review', style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
