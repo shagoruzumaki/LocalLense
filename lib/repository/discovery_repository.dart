@@ -5,7 +5,7 @@ import '../utils/location_utils.dart';
 class DiscoveryRepository {
   final _db = Supabase.instance.client;
 
-  // ─────────────────────────────────────────────────────────────────────────
+  //Git merge origin/shagor-feature ─────────────────────────────────────────────────────────────────────────
   // 3.1 — getRestaurants() with filters
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<RestaurantWithScore>> getRestaurants(RestaurantFilters filters) async {
