@@ -186,7 +186,6 @@ class _HomePageState extends State<HomePage> {
                         }
                         
                         final topList = snapshot.data ?? [];
-                        // Showing all 10 as requested, instead of just 3
                         final displayList = topList.take(10).toList();
 
                         return Column(
@@ -262,7 +261,7 @@ class _HomePageState extends State<HomePage> {
                         }
                         
                         final critics = snapshot.data ?? [];
-                        final displayCritics = critics.take(5).toList(); // Show a few more critics too
+                        final displayCritics = critics.take(10).toList();
 
                         return Column(
                           children: [

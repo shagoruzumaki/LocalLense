@@ -31,7 +31,7 @@ class Top10Service {
   /// Real-time stream for the Critics leaderboard (Lifetime).
   Stream<List<Map<String, dynamic>>> getTop10CriticsStream() {
     return _supabase
-        .from('profiles')
+        .from('users')
         .stream(primaryKey: ['id'])
         .order('helpful_votes', ascending: false)
         .limit(10)
@@ -119,7 +119,7 @@ class Top10Service {
     try {
       if (filter == 'alltime') {
         final response = await _supabase
-            .from('profiles')
+            .from('users')
             .select('*')
             .order('helpful_votes', ascending: false)
             .limit(10);
@@ -154,12 +154,12 @@ class Top10Service {
       var topUids = periodVotes.keys.toList();
       topUids.sort((a, b) => periodVotes[b]!.compareTo(periodVotes[a]!));
 
-      final profilesResp = await _supabase
-          .from('profiles')
+      final usersResp = await _supabase
+          .from('users')
           .select('*')
           .inFilter('id', topUids.take(10).toList());
       
-      return (profilesResp as List).map((u) {
+      return (usersResp as List).map((u) {
         final user = Map<String, dynamic>.from(u);
         return {
           ...user,
