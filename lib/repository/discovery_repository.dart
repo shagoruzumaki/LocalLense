@@ -91,56 +91,146 @@ class DiscoveryRepository {
   // 3.1 — searchRestaurants()
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<RestaurantWithScore>> searchRestaurants(
-    String query, {
-    double? userLat,
-    double? userLng,
-    int limit = 20,
-  }) async {
+      String query, {
+        double? userLat,
+        double? userLng,
+        int limit = 20,
+      }) async {
     try {
       final q = query.trim();
       if (q.length < 2) return [];
       final pattern = '%$q%';
 
-      final List byNameRes = await _db.from('restaurants').select()
-          .eq('active', true).ilike('name', pattern)
+      // ── 1. Search by restaurant name ──────────────────────────────────
+      final List byNameRes = await _db
+          .from('restaurants')
+          .select()
+          .eq('active', true)
+          .ilike('name', pattern)
           .order('algorithm_score', ascending: false);
       final byName = byNameRes.map((j) => Restaurant.fromSupabase(j)).toList();
 
-      final List byAddrRes = await _db.from('restaurants').select()
-          .eq('active', true).ilike('address', pattern)
-          .order('algorithm_score', ascending: false);
-      final byAddress = byAddrRes.map((j) => Restaurant.fromSupabase(j)).toList();
+      // ── 2. Search by dish name in dishes table ────────────────────────
+      // This is the main fix — searches the new dishes table
+      List<Restaurant> byDish = [];
+      try {
+        final List dishRes = await _db
+            .from('dishes')
+            .select('restaurant_id')
+            .ilike('name', pattern)  // ilike = case-insensitive partial match
+            .eq('is_available', true);
 
-      final List byTagsRes = await _db.from('restaurants').select()
-          .eq('active', true).contains('ai_tags', [q.toLowerCase()])
+        if (dishRes.isNotEmpty) {
+          final dishRestaurantIds = dishRes
+              .map((r) => r['restaurant_id'].toString())
+              .toSet()
+              .toList();
+
+          final List byDishRes = await _db
+              .from('restaurants')
+              .select()
+              .eq('active', true)
+              .inFilter('id', dishRestaurantIds)
+              .order('algorithm_score', ascending: false);
+
+          byDish = byDishRes.map((j) => Restaurant.fromSupabase(j)).toList();
+        }
+      } catch (_) {
+        // dishes table may not exist yet — silently skip
+      }
+
+      // ── 3. Search by ai_tags ──────────────────────────────────────────
+      final List byTagsRes = await _db
+          .from('restaurants')
+          .select()
+          .eq('active', true)
+          .contains('ai_tags', [q.toLowerCase()])
           .order('algorithm_score', ascending: false);
       final byTags = byTagsRes.map((j) => Restaurant.fromSupabase(j)).toList();
 
-      final List matchingReviews = await _db.from('reviews').select('restaurant_id')
-          .contains('dish_mentions', [q.toLowerCase()]);
+      // ── 4. Search by address ──────────────────────────────────────────
+      final List byAddrRes = await _db
+          .from('restaurants')
+          .select()
+          .eq('active', true)
+          .ilike('address', pattern)
+          .order('algorithm_score', ascending: false);
+      final byAddress = byAddrRes.map((j) => Restaurant.fromSupabase(j)).toList();
 
-      List<Restaurant> byDish = [];
-      if (matchingReviews.isNotEmpty) {
-        final ids = matchingReviews.map((r) => r['restaurant_id'].toString()).toSet().toList();
-        final List byDishRes = await _db.from('restaurants').select()
-            .eq('active', true).inFilter('id', ids); 
-        byDish = byDishRes.map((j) => Restaurant.fromSupabase(j)).toList();
-      }
+      // ── 5. Search dish_mentions in reviews (partial match) ────────────
+      // Fixed: use ilike on text cast instead of exact array contains
+      List<Restaurant> byReviewDish = [];
+      try {
+        final List matchingReviews = await _db
+            .from('reviews')
+            .select('restaurant_id, dish_mentions')
+            .filter('dish_mentions', 'cs', '{${q.toLowerCase()}}');
 
+        // Also try partial match via raw text search on dish_mentions
+        if (matchingReviews.isEmpty) {
+          // fallback: get all reviews and filter client-side for partial match
+          final List allReviews = await _db
+              .from('reviews')
+              .select('restaurant_id, dish_mentions')
+              .not('dish_mentions', 'is', null);
+
+          final matchedIds = <String>{};
+          for (final review in allReviews) {
+            final mentions = (review['dish_mentions'] as List<dynamic>?) ?? [];
+            for (final dish in mentions) {
+              if (dish.toString().toLowerCase().contains(q.toLowerCase())) {
+                matchedIds.add(review['restaurant_id'].toString());
+                break;
+              }
+            }
+          }
+
+          if (matchedIds.isNotEmpty) {
+            final List res = await _db
+                .from('restaurants')
+                .select()
+                .eq('active', true)
+                .inFilter('id', matchedIds.toList());
+            byReviewDish = res.map((j) => Restaurant.fromSupabase(j)).toList();
+          }
+        } else {
+          final ids = matchingReviews
+              .map((r) => r['restaurant_id'].toString())
+              .toSet()
+              .toList();
+          final List res = await _db
+              .from('restaurants')
+              .select()
+              .eq('active', true)
+              .inFilter('id', ids);
+          byReviewDish = res.map((j) => Restaurant.fromSupabase(j)).toList();
+        }
+      } catch (_) {}
+
+      // ── Merge all results (priority: name > dish > tags > address) ────
       final seen = <String>{};
       final merged = <Restaurant>[];
+
       void addIfNew(List<Restaurant> list) {
-        for (var r in list) { if (seen.add(r.id)) merged.add(r); }
+        for (var r in list) {
+          if (seen.add(r.id)) merged.add(r);
+        }
       }
 
-      addIfNew(byName);
-      addIfNew(byDish);
-      addIfNew(byTags);
-      addIfNew(byAddress);
+      addIfNew(byName);       // highest priority — name match
+      addIfNew(byDish);       // dishes table match
+      addIfNew(byReviewDish); // review dish_mentions match
+      addIfNew(byTags);       // ai_tags match
+      addIfNew(byAddress);    // lowest priority — address match
+
+      if (merged.isEmpty) return [];
 
       final scores = await _fetchScores(merged.map((r) => r.id).toList());
       var result = _enrich(merged, scores, userLat, userLng);
-      result.sort((a, b) => (b.restaurant.algorithmScore ?? 0.0).compareTo(a.restaurant.algorithmScore ?? 0.0));
+      result.sort((a, b) =>
+          (b.restaurant.algorithmScore ?? 0.0)
+              .compareTo(a.restaurant.algorithmScore ?? 0.0));
+
       return result.take(limit).toList();
     } catch (e) {
       rethrow;
