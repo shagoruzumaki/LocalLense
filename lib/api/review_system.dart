@@ -358,11 +358,13 @@ class ReviewApi {
     final response = await _supabase
         .from('reviews')
         .select('''
-          *,
-          restaurants (
-            name
-          )
-        ''')
+      *,
+      restaurants (
+        id,
+        name,
+        photos
+      )
+    ''')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
 

@@ -34,19 +34,25 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) setState(() => _isLoading = true);
 
     try {
+      // Fetch user profile
+      final userResult = await _userService.getUserProfile(userId);
+
+      // Fetch tier info and reviews in parallel
       final results = await Future.wait([
-        _userService.getUserProfile(userId),
         _tierUpgradeApi.getTierInfo(userId),
         _reviewApi.getUserReviews(userId),
       ]);
 
-      final userResult = results[0] as UserResult;
-
       if (mounted) {
         setState(() {
-          _userData = userResult.data;
-          _tierInfo = results[1] as Map<String, dynamic>;
-          _reviews = results[2] as List<Map<String, dynamic>>;
+          // ── user data ──
+          // getUserProfile returns UserResult with a 'data' map
+          // that includes: id, name, tier, verified, helpful_votes,
+          // profile_photo_url, bio, review_count
+          _userData = userResult.isSuccess ? userResult.data : null;
+
+          _tierInfo = results[0] as Map<String, dynamic>;
+          _reviews  = results[1] as List<Map<String, dynamic>>;
           _isLoading = false;
         });
       }
@@ -62,14 +68,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _showEditProfileDialog() async {
     if (_userData == null) return;
-    final nameController = TextEditingController(text: _userData?['name']);
-    final bioController = TextEditingController(text: _userData?['bio'] ?? '');
-    
+    final nameController = TextEditingController(text: _userData?['name'] ?? '');
+    final bioController  = TextEditingController(text: _userData?['bio']  ?? '');
+
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Edit Profile', style: TextStyle(color: Colors.white, fontFamily: 'serif')),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(color: Colors.white, fontFamily: 'serif'),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -79,8 +88,10 @@ class _ProfilePageState extends State<ProfilePage> {
               decoration: const InputDecoration(
                 labelText: 'Full Name',
                 labelStyle: TextStyle(color: Colors.white70),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
+                enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFFFD700))),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFFFD700))),
               ),
             ),
             const SizedBox(height: 16),
@@ -91,8 +102,10 @@ class _ProfilePageState extends State<ProfilePage> {
               decoration: const InputDecoration(
                 labelText: 'Bio',
                 labelStyle: TextStyle(color: Colors.white70),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
+                enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFFFD700))),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFFFD700))),
               ),
             ),
           ],
@@ -100,26 +113,27 @@ class _ProfilePageState extends State<ProfilePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () async {
               final newName = nameController.text.trim();
-              final newBio = bioController.text.trim();
-              
+              final newBio  = bioController.text.trim();
               Navigator.pop(context);
               setState(() => _isLoading = true);
-              
+
               final result = await _userService.updateProfile(
                 name: newName.isNotEmpty ? newName : null,
-                bio: newBio.isNotEmpty ? newBio : null,
+                bio:  newBio.isNotEmpty  ? newBio  : null,
               );
-              
+
               if (result.isSuccess) {
                 await _fetchData();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Profile updated successfully!')),
+                    const SnackBar(
+                        content: Text('Profile updated successfully!')),
                   );
                 }
               } else {
@@ -131,8 +145,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)),
-            child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFD700)),
+            child: const Text('Save',
+                style: TextStyle(
+                    color: Colors.black, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -144,26 +161,69 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF0D0D0D),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+        body: Center(
+            child: CircularProgressIndicator(color: Color(0xFFFFD700))),
       );
     }
 
     if (_userData == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0D0D0D),
-        body: Center(child: Text('User not found', style: TextStyle(color: Colors.white))),
+      return Scaffold(
+        backgroundColor: const Color(0xFF0D0D0D),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Failed to load profile',
+                  style: TextStyle(color: Colors.white)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _fetchData,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFD700)),
+                child: const Text('Retry',
+                    style: TextStyle(color: Colors.black)),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
-    final String name = _userData?['name'] ?? 'Anonymous';
+    // ── Pull data from Supabase response ──
+    final String  name            = _userData?['name']              ?? 'Anonymous';
     final String? profilePhotoUrl = _userData?['profile_photo_url'];
-    final String tier = (_tierInfo?['current_tier'] as String? ?? 'explorer').toUpperCase();
-    final bool verified = _userData?['verified'] ?? false;
-    final int helpfulVotes = _tierInfo?['helpful_votes'] ?? 0;
-    final int votesNeeded = _tierInfo?['votes_needed'] ?? 0;
-    final int threshold = _tierInfo?['threshold'] ?? 100;
-    final double progress = threshold > 0 ? (helpfulVotes / threshold).clamp(0.0, 1.0) : 0.0;
-    final String nextTier = (_tierInfo?['next_tier'] as String? ?? 'None').replaceAll('_', ' ');
+    final String? bio             = _userData?['bio'];
+    final bool    verified        = _userData?['verified']          ?? false;
+    final String? idType          = _userData?['id_type'];          // 'nid' or 'student_id'
+    final int     reviewCount     = _userData?['review_count']      ?? _reviews.length;
+
+    // ── Tier info ──
+    final String tier         = (_tierInfo?['current_tier'] as String? ?? 'explorer').toUpperCase();
+    final int    helpfulVotes = _tierInfo?['helpful_votes'] ?? 0;
+    final int    votesNeeded  = _tierInfo?['votes_needed']  ?? 0;
+    final int    threshold    = _tierInfo?['threshold']     ?? 50;
+    final String nextTier = (_tierInfo?['next_tier'] as String? ?? 'none')
+        .replaceAll('_', ' ');
+
+    // Progress within current tier range
+    final tierStarts = {
+      'explorer': 0,
+      'expert':   50,
+      'diamond':  200,
+      'platinum': 500,
+    };
+    final String currentTierKey = (_tierInfo?['current_tier'] as String? ?? 'explorer');
+    final int tierStart    = tierStarts[currentTierKey] ?? 0;
+    final double progress = currentTierKey == 'platinum'
+        ? 1.0
+        : (threshold - tierStart) > 0
+        ? ((helpfulVotes - tierStart) / (threshold - tierStart)).clamp(0.0, 1.0)
+        : 0.0;
+
+    // Verified badge label
+    final String verifiedLabel = idType == 'student_id'
+        ? 'Verified • Student ID'
+        : 'Verified • NID';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
@@ -174,7 +234,9 @@ class _ProfilePageState extends State<ProfilePage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('LocalLens', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
+        title: const Text('LocalLens',
+            style: TextStyle(
+                color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
@@ -194,7 +256,8 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              // Profile Header
+
+              // ── Profile Photo ──────────────────────
               Center(
                 child: Stack(
                   alignment: Alignment.bottomRight,
@@ -203,16 +266,21 @@ class _ProfilePageState extends State<ProfilePage> {
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFFFD700), width: 2),
+                        border: Border.all(
+                            color: const Color(0xFFFFD700), width: 2),
                       ),
                       child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        backgroundImage: (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty)
+                        backgroundColor:
+                        Colors.white.withValues(alpha: 0.1),
+                        backgroundImage: (profilePhotoUrl != null &&
+                            profilePhotoUrl.isNotEmpty)
                             ? NetworkImage(profilePhotoUrl)
                             : null,
-                        child: (profilePhotoUrl == null || profilePhotoUrl.isEmpty)
-                            ? const Icon(Icons.person, size: 50, color: Colors.white54)
+                        child: (profilePhotoUrl == null ||
+                            profilePhotoUrl.isEmpty)
+                            ? const Icon(Icons.person,
+                            size: 50, color: Colors.white54)
                             : null,
                       ),
                     ),
@@ -224,80 +292,147 @@ class _ProfilePageState extends State<ProfilePage> {
                           color: Color(0xFFFFD700),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.edit, color: Colors.black, size: 16),
+                        child: const Icon(Icons.edit,
+                            color: Colors.black, size: 16),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
+
+              // ── Name ──────────────────────────────
               Text(
                 name,
-                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'serif'),
               ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+
+              // ── Bio ───────────────────────────────
+              if (bio != null && bio.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  bio,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: Colors.white54, fontSize: 13, height: 1.4),
+                ),
+              ],
+
+              const SizedBox(height: 10),
+
+              // ── Badges ────────────────────────────
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.center,
                 children: [
                   _buildBadge(tier, _getTierColor(tier)),
-                  if (verified) ...[
-                    const SizedBox(width: 8),
-                    _buildBadge('Verified • NID', Colors.green),
-                  ],
+                  if (verified)
+                    _buildBadge(verifiedLabel, Colors.green),
                 ],
               ),
+
               const SizedBox(height: 24),
-              // Stats
+
+              // ── Stats ─────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildStatItem(_reviews.length.toString(), 'Reviews'),
+                  _buildStatItem(reviewCount.toString(), 'Reviews'),
                   _buildStatItem(helpfulVotes.toString(), 'Helpful'),
-                  _buildStatItem(_userData?['points']?.toString() ?? '0', 'Points'),
+                  // Points = helpful_votes × tier multiplier
+                  _buildStatItem(
+                    _calcPoints(helpfulVotes, tier).toString(),
+                    'Points',
+                  ),
                 ],
               ),
+
               const SizedBox(height: 32),
-              // Account Settings
+
+              // ── Account Settings ──────────────────
               _buildSectionHeader('Account Settings'),
               const SizedBox(height: 16),
-              _buildSettingsItem(Icons.verified_user_outlined, 'Verification',
-                  onTap: () => Navigator.pushNamed(context, '/verification'),
-                  trailing: verified ? _buildVerifiedBadge() : const Icon(Icons.chevron_right, color: Colors.white38)),
-              _buildSettingsItem(Icons.person_outline, 'Personal Information', onTap: _showEditProfileDialog),
-              _buildSettingsItem(Icons.payment_outlined, 'Payment Methods'),
+
+              _buildSettingsItem(
+                Icons.verified_user_outlined,
+                'Verification',
+                subtitle: verified ? 'Verified' : 'Not verified',
+                onTap: () => Navigator.pushNamed(context, '/verification'),
+                trailing: verified
+                    ? _buildVerifiedBadge()
+                    : const Icon(Icons.chevron_right,
+                    color: Colors.white38),
+              ),
+
+              _buildSettingsItem(
+                Icons.person_outline,
+                'Personal Information',
+                subtitle: 'Edit name and bio',
+                onTap: _showEditProfileDialog,
+              ),
+
+              _buildSettingsItem(
+                Icons.payment_outlined,
+                'Payment Methods',
+                subtitle: 'Coming soon',
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Payment methods coming soon.')),
+                ),
+              ),
+
               const SizedBox(height: 32),
-              // Recent Reviews
+
+              // ── Recent Reviews ────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _buildSectionHeader('Recent Reviews'),
                   TextButton(
-                    onPressed: () {},
-                    child: const Text('View All', style: TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                    onPressed: () {
+                      // TODO: navigate to full reviews list
+                    },
+                    child: const Text('View All',
+                        style: TextStyle(
+                            color: Color(0xFFFFD700), fontSize: 12)),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
+
               if (_reviews.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text('No reviews yet', style: TextStyle(color: Colors.white54)),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Column(
+                    children: [
+                      Icon(Icons.rate_review_outlined,
+                          color: Colors.white24, size: 48),
+                      const SizedBox(height: 12),
+                      const Text('No reviews yet',
+                          style: TextStyle(
+                              color: Colors.white54, fontSize: 14)),
+                      const SizedBox(height: 4),
+                      const Text('Your reviews will appear here',
+                          style: TextStyle(
+                              color: Colors.white24, fontSize: 12)),
+                    ],
+                  ),
                 )
               else
                 ..._reviews.take(3).map((review) => Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _buildRecentReview(
-                        review['restaurants']?['name'] ?? 'Unknown Restaurant',
-                        review['body'] ?? '',
-                        (review['rating'] ?? 0.0).toString(),
-                        review['photos'] != null && (review['photos'] as List).isNotEmpty
-                            ? (review['photos'] as List)[0]
-                            : null,
-                      ),
-                    )),
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _buildRecentReview(review),
+                )),
+
               const SizedBox(height: 24),
-              // Milestone
-              if (nextTier != 'None')
+
+              // ── Next Milestone ────────────────────
+              if (nextTier != 'none')
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -311,9 +446,14 @@ class _ProfilePageState extends State<ProfilePage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Next Milestone', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const Text('Next Milestone',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 12)),
                           Text('$helpfulVotes / $threshold Votes',
-                              style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
+                              style: const TextStyle(
+                                  color: Color(0xFFFFD700),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -322,19 +462,26 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: LinearProgressIndicator(
                           value: progress,
                           backgroundColor: Colors.white10,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFFFFD700)),
                           minHeight: 8,
                         ),
                       ),
                       const SizedBox(height: 12),
                       RichText(
                         text: TextSpan(
-                          style: const TextStyle(color: Colors.white60, fontSize: 12),
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 12),
                           children: [
-                            TextSpan(text: 'Get $votesNeeded more helpful votes to unlock '),
                             TextSpan(
-                                text: '$nextTier',
-                                style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
+                                text:
+                                'Get $votesNeeded more helpful votes to unlock '),
+                            TextSpan(
+                              text: nextTier,
+                              style: const TextStyle(
+                                  color: Color(0xFFFFD700),
+                                  fontWeight: FontWeight.bold),
+                            ),
                             const TextSpan(text: ' status.'),
                           ],
                         ),
@@ -342,6 +489,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ],
                   ),
                 ),
+
               const SizedBox(height: 100),
             ],
           ),
@@ -350,17 +498,23 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // ── Points calc: helpful_votes × tier multiplier ──
+  int _calcPoints(int helpfulVotes, String tier) {
+    final multipliers = {
+      'PLATINUM': 4,
+      'DIAMOND':  3,
+      'EXPERT':   2,
+      'EXPLORER': 1,
+    };
+    return helpfulVotes * (multipliers[tier] ?? 1);
+  }
+
   Color _getTierColor(String tier) {
     switch (tier.toLowerCase()) {
-      case 'platinum':
-        return Colors.blueGrey.shade200;
-      case 'diamond':
-        return Colors.cyan;
-      case 'expert':
-        return Colors.deepPurpleAccent;
-      case 'explorer':
-      default:
-        return Colors.amber;
+      case 'platinum': return Colors.blueGrey.shade200;
+      case 'diamond':  return Colors.cyan;
+      case 'expert':   return Colors.deepPurpleAccent;
+      default:         return Colors.amber;
     }
   }
 
@@ -374,7 +528,8 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       child: Text(
         text,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+        style: TextStyle(
+            color: color, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -382,9 +537,14 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildStatItem(String value, String label) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        Text(label,
+            style: const TextStyle(color: Colors.white54, fontSize: 12)),
       ],
     );
   }
@@ -394,12 +554,22 @@ class _ProfilePageState extends State<ProfilePage> {
       alignment: Alignment.centerLeft,
       child: Text(
         title,
-        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+        style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'serif'),
       ),
     );
   }
 
-  Widget _buildSettingsItem(IconData icon, String title, {VoidCallback? onTap, Widget? trailing}) {
+  Widget _buildSettingsItem(
+      IconData icon,
+      String title, {
+        String? subtitle,
+        VoidCallback? onTap,
+        Widget? trailing,
+      }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -413,9 +583,22 @@ class _ProfilePageState extends State<ProfilePage> {
           children: [
             Icon(icon, color: Colors.white70, size: 20),
             const SizedBox(width: 16),
-            Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
-            const Spacer(),
-            trailing ?? const Icon(Icons.chevron_right, color: Colors.white38),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 15)),
+                  if (subtitle != null)
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+            ),
+            trailing ??
+                const Icon(Icons.chevron_right, color: Colors.white38),
           ],
         ),
       ),
@@ -431,16 +614,59 @@ class _ProfilePageState extends State<ProfilePage> {
         border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: const Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.check_circle, color: Colors.green, size: 12),
           SizedBox(width: 4),
-          Text('VERIFIED', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+          Text('VERIFIED',
+              style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
 
-  Widget _buildRecentReview(String restaurantName, String content, String rating, String? photoUrl) {
+  // ── Review card ───────────────────────────────
+  Widget _buildRecentReview(Map<String, dynamic> review) {
+    final restaurant = review['restaurants'] as Map<String, dynamic>? ?? {};
+    final String restaurantName = restaurant['name'] ?? 'Unknown Restaurant';
+    final String body           = review['body']    ?? '';
+    final double rating         = (review['rating'] as num?)?.toDouble() ?? 0.0;
+    final int    helpfulVotes   = review['helpful_votes'] ?? 0;
+    final String moodTag        = review['mood_tag'] ?? 'good';
+
+    // Get first review photo if exists
+    final reviewPhotos = (review['photos'] as List<dynamic>?) ?? [];
+    final String? photoUrl =
+    reviewPhotos.isNotEmpty ? reviewPhotos[0].toString() : null;
+
+    // Get first restaurant photo as fallback
+    final restPhotos =
+        (restaurant['photos'] as List<dynamic>?) ?? [];
+    final String? restPhotoUrl =
+    restPhotos.isNotEmpty ? restPhotos[0].toString() : null;
+
+    // Mood emoji
+    final moodEmoji = moodTag == 'loved_it'
+        ? '😍'
+        : moodTag == 'good'
+        ? '😊'
+        : '😐';
+
+    // Time ago
+    final createdAt =
+        DateTime.tryParse(review['created_at'] ?? '') ?? DateTime.now();
+    final diff = DateTime.now().difference(createdAt);
+    final timeAgo = diff.inDays > 30
+        ? '${(diff.inDays / 30).floor()}mo ago'
+        : diff.inDays > 0
+        ? '${diff.inDays}d ago'
+        : diff.inHours > 0
+        ? '${diff.inHours}h ago'
+        : 'Just now';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -451,37 +677,85 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Restaurant name + rating + time
           Row(
             children: [
               Expanded(
-                child: Text(restaurantName,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
-              const SizedBox(width: 4),
-              Text(rating, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(content,
-              style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 13),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis),
-          if (photoUrl != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.white10,
-                image: DecorationImage(
-                  image: NetworkImage(photoUrl),
-                  fit: BoxFit.cover,
+                child: Text(
+                  restaurantName,
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              Text(moodEmoji,
+                  style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
+              const Icon(Icons.star,
+                  color: Color(0xFFFFD700), size: 14),
+              const SizedBox(width: 3),
+              Text(rating.toStringAsFixed(1),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Text(timeAgo,
+                  style: const TextStyle(
+                      color: Colors.white38, fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Review body
+          Text(
+            body,
+            style: const TextStyle(
+                color: Colors.white70, height: 1.5, fontSize: 13),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+
+          // Photo + helpful votes row
+          if (photoUrl != null || restPhotoUrl != null || helpfulVotes > 0) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                // Photo thumbnail
+                if (photoUrl != null || restPhotoUrl != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      photoUrl ?? restPhotoUrl!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.image_not_supported,
+                            color: Colors.white24, size: 20),
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                // Helpful votes
+                if (helpfulVotes > 0)
+                  Row(
+                    children: [
+                      const Icon(Icons.thumb_up_outlined,
+                          color: Colors.white38, size: 13),
+                      const SizedBox(width: 4),
+                      Text('$helpfulVotes helpful',
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 11)),
+                    ],
+                  ),
+              ],
             ),
           ],
         ],

@@ -4,10 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
-<<<<<<< HEAD
   file_selector_windows
-=======
->>>>>>> origin/rahat-work
   firebase_core
   geolocator_windows
   url_launcher_windows
