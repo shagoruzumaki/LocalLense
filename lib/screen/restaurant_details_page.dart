@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -813,6 +814,8 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
       final bytes = await photo.readAsBytes();
       final fileName =
           'review_${DateTime.now().millisecondsSinceEpoch}_${photo.name}';
+      print('USER: ${Supabase.instance.client.auth.currentUser}');
+      print('USER ID: ${Supabase.instance.client.auth.currentUser?.id}');
       await supabase.storage
           .from('review-photos')
           .uploadBinary(fileName, bytes);
@@ -1022,12 +1025,19 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          File(_selectedPhotos[i].path),
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                        ),
+                        child: kIsWeb
+                            ? Image.network(
+                                _selectedPhotos[i].path,
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(
+                                File(_selectedPhotos[i].path),
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                              ),
                       ),
                       Positioned(
                         top: 2,
