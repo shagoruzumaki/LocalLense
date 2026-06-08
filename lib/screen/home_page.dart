@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/restaurant_service.dart';
 import '../services/top10_service.dart';
 import '../services/location_service.dart';
 import '../services/discovery_service.dart';
+import '../services/user_service.dart';
 import '../model/restaurant.dart';
 import 'ranking_page.dart';
 
@@ -18,6 +20,7 @@ class _HomePageState extends State<HomePage> {
   final Top10Service _top10Service = Top10Service();
   final LocationService _locationService = LocationService();
   final DiscoveryService _discoveryService = DiscoveryService();
+  final UserService _userService = UserService();
   
   late Future<List<RestaurantWithScore>> _nearbyRestaurantsFuture;
   late Future<List<Restaurant>> _top10RestaurantsFuture;
@@ -26,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   String _neighbourhood = 'Nearby';
   double? _userLat;
   double? _userLng;
+  String? _userPhotoUrl;
 
   // Search State
   final TextEditingController _searchController = TextEditingController();
@@ -41,6 +45,21 @@ class _HomePageState extends State<HomePage> {
     _top10CriticsFuture = _top10Service.getTop10Critics(filter: 'alltime');
     _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: 23.8103, lng: 90.4125, radiusKm: 10);
     _loadData();
+    _fetchUserPhoto();
+  }
+
+  Future<void> _fetchUserPhoto() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      final result = await _userService.getUserProfile(user.id);
+      if (result.isSuccess && result.data != null) {
+        if (mounted) {
+          setState(() {
+            _userPhotoUrl = result.data!['profile_photo_url'];
+          });
+        }
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -107,7 +126,10 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: const Color(0xFF0D0D0D),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadData,
+          onRefresh: () async {
+            await _loadData();
+            await _fetchUserPhoto();
+          },
           color: const Color(0xFFFFD700),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -135,11 +157,15 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(width: 15),
                       GestureDetector(
                         onTap: () => Navigator.pushNamed(context, '/profile'),
-                        child: const CircleAvatar(
+                        child: CircleAvatar(
                           radius: 18,
-                          backgroundImage: NetworkImage(
-                            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop',
-                          ),
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          backgroundImage: (_userPhotoUrl != null && _userPhotoUrl!.isNotEmpty)
+                              ? NetworkImage(_userPhotoUrl!)
+                              : null,
+                          child: (_userPhotoUrl == null || _userPhotoUrl!.isEmpty)
+                              ? const Icon(Icons.person, size: 18, color: Colors.white54)
+                              : null,
                         ),
                       ),
                     ],
