@@ -5,7 +5,8 @@ import '../model/restaurant.dart';
 import '../model/dish.dart';
 
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
+  final String? initialQuery;
+  const SearchPage({super.key, this.initialQuery});
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -29,14 +30,27 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        setState(() {}); // Update UI when tab changes
+      if (!_tabController.indexIsChanging) {
+        setState(() {}); 
       }
     });
-    _initLocation();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _searchFocus.requestFocus();
+
+    if (widget.initialQuery != null) {
+      _searchController.text = widget.initialQuery!;
+      _performSearch();
+    }
+
+    _initLocation().then((_) {
+      if (widget.initialQuery != null) {
+        _performSearch();
+      }
     });
+
+    if (widget.initialQuery == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocus.requestFocus();
+      });
+    }
   }
 
   @override
@@ -75,12 +89,11 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     setState(() => _isLoading = true);
 
     try {
-      // Perform both searches
       final resultsFuture = _discoveryService.searchRestaurants(
         query,
         lat: _userLat,
         lng: _userLng,
-        searchByDish: false,
+        searchByDish: true,
       );
       
       final dishesFuture = _discoveryService.searchDishes(query);
@@ -102,32 +115,33 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Container(
           height: 45,
           decoration: BoxDecoration(
-            color: Colors.grey[100],
+            color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: Colors.white12),
           ),
           child: TextField(
             controller: _searchController,
             focusNode: _searchFocus,
             onChanged: (value) => _performSearch(),
-            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Search for dishes or places...',
-              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-              prefixIcon: Icon(Icons.search, color: Colors.grey[600], size: 20),
+              hintStyle: TextStyle(color: Colors.white30, fontSize: 14),
+              prefixIcon: const Icon(Icons.search, color: Colors.white30, size: 20),
               suffixIcon: _searchController.text.isNotEmpty 
                   ? IconButton(
-                      icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+                      icon: const Icon(Icons.cancel, color: Colors.white30, size: 20),
                       onPressed: () {
                         _searchController.clear();
                         _performSearch();
@@ -143,14 +157,14 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
           preferredSize: const Size.fromHeight(48),
           child: Container(
             decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
+              border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
             ),
             child: TabBar(
               controller: _tabController,
               indicatorColor: const Color(0xFFD70F64),
               indicatorWeight: 3,
               labelColor: const Color(0xFFD70F64),
-              unselectedLabelColor: Colors.grey[600],
+              unselectedLabelColor: Colors.white38,
               labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               tabs: const [
                 Tab(text: 'Restaurants'),
@@ -161,7 +175,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFD70F64)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
           : TabBarView(
               controller: _tabController,
               children: [
@@ -177,7 +191,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     if (_results.isEmpty) return _buildNoResultsView();
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.all(20),
       itemCount: _results.length,
       itemBuilder: (context, index) => _buildRestaurantCard(_results[index]),
     );
@@ -188,7 +202,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     if (_dishResults.isEmpty) return _buildNoResultsView();
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       itemCount: _dishResults.length,
       itemBuilder: (context, index) => _buildDishCard(_dishResults[index]),
     );
@@ -199,9 +213,9 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search, size: 80, color: Colors.grey[200]),
+          Icon(Icons.search, size: 80, color: Colors.white.withOpacity(0.05)),
           const SizedBox(height: 16),
-          Text('Search for your favorite spots', style: TextStyle(color: Colors.grey[400])),
+          Text('Search for your favorite spots', style: TextStyle(color: Colors.white.withOpacity(0.2))),
         ],
       ),
     );
@@ -212,9 +226,28 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search_off, size: 60, color: Colors.grey[200]),
-          const SizedBox(height: 16),
-          Text('No results found', style: TextStyle(color: Colors.grey[400])),
+          Container(
+            padding: const EdgeInsets.all(30),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.search_off_rounded, size: 100, color: Colors.white.withOpacity(0.05)),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'No results found',
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'We couldn\'t find any restaurants or dishes matching "${_searchController.text}"',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+            ),
+          ),
         ],
       ),
     );
@@ -225,29 +258,26 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
       onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Image.network(
-                  dish.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: Colors.grey[100]),
-                ),
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                dish.imageUrl,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.fastfood, size: 30, color: Colors.white38)),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(12),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -255,22 +285,34 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(dish.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          dish.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      Text('Tk ${dish.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFFD70F64))),
+                      Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 4),
+                  Text(
+                    '${dish.restaurantName ?? ''} • ${dish.restaurantAddress ?? ''}',
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(
-                        child: Text('${dish.restaurantName} • ${dish.restaurantAddress ?? "Sylhet"}', style: TextStyle(color: Colors.grey[600], fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        dish.restaurantRating?.toStringAsFixed(1) ?? '4.0',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
-                      if (dish.restaurantRating != null) ...[
-                        const Icon(Icons.star, color: Colors.orange, size: 14),
-                        const SizedBox(width: 2),
-                        Text(dish.restaurantRating!.toStringAsFixed(1), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                      ],
+                      const Spacer(),
+                      const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 12),
                     ],
                   ),
                 ],
@@ -287,32 +329,67 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
       child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(r.imageUrl, width: 70, height: 70, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[100])),
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                r.imageUrl,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.restaurant, size: 30, color: Colors.white38)),
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          r.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(item.scoreLabel.toUpperCase(), style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                   const SizedBox(height: 4),
-                  Text(r.categoryDisplay, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  const SizedBox(height: 4),
+                  Text(
+                    r.address,
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.star, color: Colors.orange, size: 14),
-                      const SizedBox(width: 2),
-                      Text(r.rating.toStringAsFixed(1), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 8),
-                      Text('• ${r.address}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                      Text('৳' * r.priceTier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                      const SizedBox(width: 4),
+                      Text('• ${r.categoryDisplay}', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                      if (item.distanceKm != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.near_me, color: Colors.white38, size: 10),
+                        const SizedBox(width: 4),
+                        Text('${item.distanceKm!.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      ],
+                      const Spacer(),
+                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      Text(r.rating.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],

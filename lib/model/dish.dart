@@ -15,6 +15,10 @@ class Dish {
   final double? restaurantRating;
   final String? restaurantAddress;
 
+  // Trending Metrics
+  final double trendingScore;
+  final int mentionCount;
+
   Dish({
     required this.id,
     required this.restaurantId,
@@ -27,11 +31,11 @@ class Dish {
     this.restaurantName,
     this.restaurantRating,
     this.restaurantAddress,
+    this.trendingScore = 0.0,
+    this.mentionCount = 0,
   });
 
   factory Dish.fromSupabase(Map<String, dynamic> json) {
-    // Supabase can return joined data as a Map or a List containing a Map
-    // and the key might be singular 'restaurant' or plural 'restaurants'
     var resData = json['restaurants'] ?? json['restaurant'];
     Map<String, dynamic>? restaurant;
     
@@ -57,6 +61,26 @@ class Dish {
               : (restaurant['rating'] as num?)?.toDouble())
           : null,
       restaurantAddress: restaurant?['address'],
+      trendingScore: (json['trending_score'] as num?)?.toDouble() ?? 0.0,
+      mentionCount: json['mention_count'] ?? 0,
+    );
+  }
+
+  Dish copyWith({double? trendingScore, int? mentionCount}) {
+    return Dish(
+      id: id,
+      restaurantId: restaurantId,
+      name: name,
+      description: description,
+      price: price,
+      photoUrl: photoUrl,
+      isAvailable: isAvailable,
+      category: category,
+      restaurantName: restaurantName,
+      restaurantRating: restaurantRating,
+      restaurantAddress: restaurantAddress,
+      trendingScore: trendingScore ?? this.trendingScore,
+      mentionCount: mentionCount ?? this.mentionCount,
     );
   }
 

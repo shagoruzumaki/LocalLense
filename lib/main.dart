@@ -70,6 +70,12 @@ class MyApp extends StatelessWidget {
             builder: (context) => DishDetailsPage(dish: dish),
           );
         }
+        if (settings.name == '/search') {
+          final query = settings.arguments as String?;
+          return MaterialPageRoute(
+            builder: (context) => SearchPage(initialQuery: query),
+          );
+        }
         return null; // Let 'routes' handle other routes
       },
       routes: {
@@ -84,7 +90,7 @@ class MyApp extends StatelessWidget {
         '/forgot-password': (_) => const ForgotPasswordPage(),
         '/reset-password': (_) => const ResetPasswordPage(),
         '/discover': (_) => const DiscoverPage(),
-        '/search': (_) => const SearchPage(),
+        // '/search' is now handled in onGenerateRoute
         '/profile': (_) => const ProfilePage(),
         '/ranking': (_) => const RankingPage(),
         '/map': (_) => const MapPage(),
