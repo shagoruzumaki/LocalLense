@@ -22,13 +22,38 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   final ReviewApi _reviewApi = ReviewApi();
 
   RestaurantWithScore? _data;
-  AlgorithmScore? _scoreBreakdown;
   bool _isLoading = true;
 
   int _selectedTab = 0; // 0=Overview, 1=Menu, 2=Reviews, 3=Photos
   List<Map<String, dynamic>> _reviews = [];
   bool _loadingReviews = false;
   final Set<String> _votedReviewIds = {};
+
+  Future<void> _loadVotedReviews(List<Map<String, dynamic>> reviews) async {
+    try {
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      if (currentUserId == null) return;
+
+      final reviewIds = reviews.map((r) => r['id'].toString()).toList();
+      if (reviewIds.isEmpty) return;
+
+      final List votedData = await Supabase.instance.client
+          .from('review_votes')
+          .select('review_id')
+          .eq('voter_id', currentUserId)
+          .inFilter('review_id', reviewIds);
+
+      if (mounted) {
+        setState(() {
+          for (final vote in votedData) {
+            _votedReviewIds.add(vote['review_id'].toString());
+          }
+        });
+      }
+    } catch (_) {
+      // silently fail — voted state is cosmetic
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -48,12 +73,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     setState(() => _isLoading = true);
     try {
       final detail = await _discoveryService.getRestaurantDetail(id);
-      final score = await _discoveryService.getScoreBreakdown(id);
-
       if (mounted) {
         setState(() {
           _data = detail;
-          _scoreBreakdown = score;
           _isLoading = false;
         });
       }
@@ -69,6 +91,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       final reviews = await _reviewApi.getRestaurantReviews(id);
       if (mounted) {
         setState(() => _reviews = reviews);
+        await _loadVotedReviews(reviews);
       }
     } catch (e) {
       if (mounted) {
@@ -90,7 +113,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           _votedReviewIds.remove(reviewId);
           final idx = _reviews.indexWhere((r) => r['id'] == reviewId);
           if (idx != -1) {
-            _reviews[idx]['helpful_votes'] = ((_reviews[idx]['helpful_votes'] as int?) ?? 1) - 1;
+            final current = (_reviews[idx]['helpful_votes'] as int?) ?? 0;
+            _reviews[idx]['helpful_votes'] = current > 0 ? current - 1 : 0;
           }
         });
       } else {
@@ -126,7 +150,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         reviewApi: _reviewApi,
         onSubmitted: () {
           _loadReviews(_data!.restaurant.id);
-          setState(() => _selectedTab = 2); // switch to Reviews tab
+          setState(() => _selectedTab = 2);
         },
       ),
     );
@@ -185,7 +209,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withOpacity(0.3),
+                              Colors.black.withValues(alpha: 0.3),
                               const Color(0xFF0D0D0D),
                             ],
                           ),
@@ -242,7 +266,6 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Score Card
                       GestureDetector(
                         onTap: () => Navigator.push(
                           context,
@@ -255,7 +278,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: Colors.white10),
                           ),
@@ -318,7 +341,6 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                         ),
                       ),
                       const SizedBox(height: 25),
-                      // Tabs
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -346,7 +368,6 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                       ),
                       const SizedBox(height: 25),
 
-                      // Tab Content
                       if (_selectedTab == 0) _buildOverviewTab(),
                       if (_selectedTab == 1) _buildMenuTab(),
                       if (_selectedTab == 2) _buildReviewsTab(),
@@ -359,7 +380,6 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
               ),
             ],
           ),
-          // Write Review Button
           Positioned(
             bottom: 0,
             left: 0,
@@ -370,7 +390,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
+                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.9)],
                 ),
               ),
               child: ElevatedButton.icon(
@@ -401,12 +421,12 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFD700).withOpacity(0.05),
+            color: const Color(0xFFFFD700).withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
+            border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
           ),
           child: Text(
-            r.aiSummary ?? '"Reviewers highlight the excellent ambiance and quality of this spot."',
+            r.aiSummary ?? '\"Reviewers highlight the excellent ambiance and quality of this spot.\"',
             style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, height: 1.5),
           ),
         ),
@@ -547,7 +567,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
       ),
@@ -558,7 +578,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: const Color(0xFFFFD700).withOpacity(0.2),
+                backgroundColor: const Color(0xFFFFD700).withValues(alpha: 0.2),
                 backgroundImage: user['profile_photo_url'] != null ? NetworkImage(user['profile_photo_url'] as String) : null,
                 child: user['profile_photo_url'] == null ? Text(name[0].toUpperCase(), style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)) : null,
               ),
@@ -617,10 +637,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isVoted ? const Color(0xFFFFD700).withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                    color: isVoted ? const Color(0xFFFFD700).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: isVoted ? const Color(0xFFFFD700).withOpacity(0.5) : Colors.white12,
+                      color: isVoted ? const Color(0xFFFFD700).withValues(alpha: 0.5) : Colors.white12,
                     ),
                   ),
                   child: Row(
@@ -671,9 +691,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(tier.toUpperCase(), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
     );
@@ -690,9 +710,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: data.$2.withOpacity(0.1),
+        color: data.$2.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: data.$2.withOpacity(0.3)),
+        border: Border.all(color: data.$2.withValues(alpha: 0.3)),
       ),
       child: Text(data.$1, style: TextStyle(color: data.$2, fontSize: 11)),
     );
@@ -717,9 +737,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
         text,
@@ -832,7 +852,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
 
     for (final photo in _selectedPhotos) {
       final bytes = await photo.readAsBytes();
-      final fileName = 'review_${DateTime.now().millisecondsSinceEpoch}_${photo.name}';
+      final fileName = 'review_\${DateTime.now().millisecondsSinceEpoch}_\${photo.name}';
       await supabase.storage.from('review-photos').uploadBinary(fileName, bytes);
       final url = supabase.storage.from('review-photos').getPublicUrl(fileName);
       urls.add(url);
@@ -885,7 +905,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit: \$e')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -984,7 +1004,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 hintText: 'What did you think? Mention dishes, atmosphere...',
                 hintStyle: const TextStyle(color: Colors.white24),
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.05),
+                fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFD700))),
@@ -1000,7 +1020,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 hintText: 'e.g. Smoked Hilsa, Lamb Curry (comma separated)',
                 hintStyle: const TextStyle(color: Colors.white24),
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.05),
+                fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFD700))),
@@ -1014,7 +1034,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
-                  disabledBackgroundColor: const Color(0xFFFFD700).withOpacity(0.4),
+                  disabledBackgroundColor: const Color(0xFFFFD700).withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -1062,7 +1082,7 @@ class _MoodButton extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFFFD700).withOpacity(0.15) : Colors.white.withOpacity(0.05),
+            color: selected ? const Color(0xFFFFD700).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: selected ? const Color(0xFFFFD700) : Colors.white12, width: selected ? 1.5 : 1),
           ),
