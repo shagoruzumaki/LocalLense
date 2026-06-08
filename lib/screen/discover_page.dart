@@ -4,6 +4,7 @@ import '../services/location_service.dart';
 import '../services/restaurant_service.dart';
 import '../services/top10_service.dart';
 import '../model/restaurant.dart';
+import '../model/dish.dart';
 
 class DiscoverPage extends StatelessWidget {
   const DiscoverPage({super.key});
@@ -28,6 +29,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
   final Top10Service _top10Service = Top10Service();
   
   List<RestaurantWithScore> _restaurants = [];
+  List<Dish> _dishResults = [];
   List<Restaurant> _trendingRestaurants = [];
   bool _isLoading = true;
   String _selectedCategory = 'All';
@@ -46,7 +48,6 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
     setState(() => _isLoading = true);
     
     try {
-      // 1. Get Live Location
       final hasPermission = await _locationService.checkPermission();
       if (hasPermission) {
         final position = await _locationService.getCurrentLocation();
@@ -59,17 +60,16 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
         _currentLocationName = 'Dhaka';
       }
 
-      // 2. Fetch Data using live location
       final results = await Future.wait([
         _discoveryService.getNearby(lat: _userLat!, lng: _userLng!, radiusKm: 10),
-        _top10Service.getTop10Restaurants(filter: 'week'),
+        _top10Service.getTopRestaurantsByPeriod(filter: 'week'),
       ]);
 
       if (mounted) {
         setState(() {
           _restaurants = results[0] as List<RestaurantWithScore>;
-          // Show all 10 restaurants in the Trending section as requested
-          _trendingRestaurants = results[1] as List<Restaurant>;
+          _trendingRestaurants = (results[1] as List<Restaurant>).take(10).toList();
+          _dishResults = [];
           _isLoading = false;
         });
       }
@@ -89,16 +89,22 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
       return;
     }
     setState(() => _isLoading = true);
-    final results = await _discoveryService.searchRestaurants(
-      query, 
-      lat: _userLat, 
-      lng: _userLng
-    );
-    if (mounted) {
-      setState(() {
-        _restaurants = results;
-        _isLoading = false;
-      });
+    
+    try {
+      final results = await Future.wait([
+        _discoveryService.searchRestaurants(query, lat: _userLat, lng: _userLng),
+        _discoveryService.searchDishes(query),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _restaurants = results[0] as List<RestaurantWithScore>;
+          _dishResults = results[1] as List<Dish>;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -116,6 +122,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
     if (mounted) {
       setState(() {
         _restaurants = results;
+        _dishResults = [];
         _isLoading = false;
       });
     }
@@ -170,6 +177,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
                 hintText: 'Search for dishes or places...',
                 hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
                 prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5)),
+                suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () { _searchController.clear(); _fetchInitialData(); }) : null,
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
@@ -192,43 +200,92 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
               ),
             ),
             const SizedBox(height: 30),
-            Text(
-              _searchController.text.isEmpty ? 'Real Spots Near You' : 'Search Results',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'serif',
+            
+            if (_isLoading)
+              const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFFFFD700))))
+            else ...[
+              if (_dishResults.isNotEmpty) ...[
+                const Text('Menu Items', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif')),
+                const SizedBox(height: 15),
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _dishResults.length,
+                    itemBuilder: (context, index) => _buildDishCard(_dishResults[index]),
+                  ),
+                ),
+                const SizedBox(height: 30),
+              ],
+              
+              Text(
+                _searchController.text.isEmpty ? 'Real Spots Near You' : 'Restaurants',
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+              ),
+              const SizedBox(height: 15),
+              _restaurants.isEmpty
+                  ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No restaurants found', style: TextStyle(color: Colors.white54))))
+                  : SizedBox(
+                      height: 220,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _restaurants.length,
+                        itemBuilder: (context, index) => _buildNearYouCard(_restaurants[index]),
+                      ),
+                    ),
+            ],
+
+            const SizedBox(height: 30),
+            if (_searchController.text.isEmpty)
+              _buildTop10Section('Trending This Week', _trendingRestaurants.asMap().entries.map((entry) {
+                int idx = entry.key;
+                Restaurant r = entry.value;
+                return _buildRankingMiniItem(
+                  '#${idx + 1}', 
+                  r.name, 
+                  r.categoryDisplay, 
+                  r.rating.toStringAsFixed(1),
+                  onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+                );
+              }).toList()),
+            const SizedBox(height: 100),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDishCard(Dish dish) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
+      child: Container(
+        width: 160,
+        margin: const EdgeInsets.only(right: 15),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              child: Image.network(dish.imageUrl, height: 100, width: 160, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.white10, height: 100, child: const Icon(Icons.fastfood, color: Colors.white38))),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(dish.name, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(dish.restaurantName ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 6),
+                  Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
               ),
             ),
-            const SizedBox(height: 15),
-            _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
-                : _restaurants.isEmpty
-                    ? const Center(child: Text('No results found', style: TextStyle(color: Colors.white54)))
-                    : SizedBox(
-                        height: 220,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _restaurants.length,
-                          itemBuilder: (context, index) {
-                            return _buildNearYouCard(_restaurants[index]);
-                          },
-                        ),
-                      ),
-            const SizedBox(height: 30),
-            _buildTop10Section('Trending This Week', _trendingRestaurants.asMap().entries.map((entry) {
-              int idx = entry.key;
-              Restaurant r = entry.value;
-              return _buildRankingMiniItem(
-                '#${idx + 1}', 
-                r.name, 
-                r.categoryDisplay, 
-                r.rating.toStringAsFixed(1),
-                onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
-              );
-            }).toList()),
-            const SizedBox(height: 100),
           ],
         ),
       ),

@@ -1,15 +1,27 @@
 import '../model/restaurant.dart';
+import '../model/dish.dart';
 import '../repository/discovery_repository.dart';
 
 class DiscoveryService {
   final DiscoveryRepository _repository = DiscoveryRepository();
 
-  Future<List<RestaurantWithScore>> searchRestaurants(String query, {double? lat, double? lng, SortOption sortBy = SortOption.score}) async {
-    return _repository.searchRestaurants(query, userLat: lat, userLng: lng, sortBy: sortBy);
+  Future<List<RestaurantWithScore>> searchRestaurants(String query, {
+    double? lat, 
+    double? lng, 
+    SortOption sortBy = SortOption.score,
+    bool searchByDish = true,
+  }) async {
+    return _repository.searchRestaurants(
+      query, 
+      userLat: lat, 
+      userLng: lng, 
+      sortBy: sortBy,
+      searchByDish: searchByDish,
+    );
   }
 
   /// Search for specific dishes matching the query
-  Future<List<Map<String, dynamic>>> searchDishes(String query) async {
+  Future<List<Dish>> searchDishes(String query) async {
     return _repository.searchDishes(query);
   }
 

@@ -17,6 +17,8 @@ import 'package:local_lense/screen/signup_page.dart';
 import 'package:local_lense/screen/ranking_page.dart';
 import 'package:local_lense/screen/restaurant_details_page.dart';
 import 'package:local_lense/screen/verification_page.dart';
+import 'package:local_lense/screen/dish_details_page.dart';
+import 'package:local_lense/model/dish.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,6 +62,12 @@ class MyApp extends StatelessWidget {
           final restaurantId = settings.arguments as String;
           return MaterialPageRoute(
             builder: (context) => RestaurantDetailsPage(restaurantId: restaurantId),
+          );
+        }
+        if (settings.name == '/dish-details') {
+          final dish = settings.arguments as Dish;
+          return MaterialPageRoute(
+            builder: (context) => DishDetailsPage(dish: dish),
           );
         }
         return null; // Let 'routes' handle other routes

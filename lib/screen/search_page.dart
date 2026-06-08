@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/discovery_service.dart';
 import '../services/location_service.dart';
 import '../model/restaurant.dart';
+import '../model/dish.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -18,14 +19,13 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   late TabController _tabController;
 
   List<RestaurantWithScore> _results = [];
-  List<Map<String, dynamic>> _dishResults = [];
+  List<Dish> _dishResults = [];
   bool _isLoading = false;
   double? _userLat;
   double? _userLng;
 
   // Filters
   SortOption _selectedSort = SortOption.score;
-  bool _filterOpenNow = false;
 
   @override
   void initState() {
@@ -73,20 +73,21 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     setState(() => _isLoading = true);
 
     try {
+      // 1. Search for restaurants by NAME ONLY (searchByDish: false)
       final results = await _discoveryService.searchRestaurants(
         query,
         lat: _userLat,
         lng: _userLng,
         sortBy: _selectedSort,
+        searchByDish: false, // Don't show restaurant cards for dish matches
       );
       
+      // 2. Search for dishes specifically
       final dishes = await _discoveryService.searchDishes(query);
 
       if (mounted) {
         setState(() {
-          _results = _filterOpenNow 
-              ? results.where((r) => r.isOpenNow).toList()
-              : results;
+          _results = results;
           _dishResults = dishes;
           _isLoading = false;
         });
@@ -99,29 +100,29 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Container(
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.grey[100],
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(20),
           ),
           child: TextField(
             controller: _searchController,
             focusNode: _searchFocus,
             onChanged: (value) => _performSearch(),
-            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'Search for restaurants, cuisines and dishes',
-              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-              prefixIcon: Icon(Icons.search, color: Colors.grey[600], size: 20),
+              hintText: 'Search for dishes or places...',
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 14),
+              prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5), size: 20),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
@@ -130,32 +131,21 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         actions: [
           if (_searchController.text.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+              icon: const Icon(Icons.cancel, color: Colors.white54, size: 20),
               onPressed: () {
                 _searchController.clear();
                 _performSearch();
               },
             ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFFD70F64),
-          labelColor: const Color(0xFFD70F64),
-          unselectedLabelColor: Colors.grey[600],
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          tabs: const [
-            Tab(text: 'Restaurants'),
-            Tab(text: 'Shops'),
-          ],
-        ),
       ),
       body: Column(
         children: [
           _buildFilterBar(),
-          const Divider(color: Colors.black12, height: 1),
+          const Divider(color: Colors.white10, height: 1),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFD70F64)))
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
                 : _buildResultsList(),
           ),
         ],
@@ -170,68 +160,11 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          _buildFilterIconChip(),
+          _buildFilterChip('Best Score', SortOption.score),
           const SizedBox(width: 8),
-          _buildPillChip('Delivery', isSelected: true),
+          _buildFilterChip('Nearest', SortOption.nearest),
           const SizedBox(width: 8),
-          _buildPillChip('Pick-Up'),
-          const SizedBox(width: 8),
-          _buildDropdownChip('Sort'),
-          const SizedBox(width: 8),
-          _buildPillChip('Free delivery'),
-          const SizedBox(width: 8),
-          _buildFilterChip('Best Rated', SortOption.score),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterIconChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Icon(Icons.tune, size: 18, color: Colors.grey[700]),
-    );
-  }
-
-  Widget _buildPillChip(String label, {bool isSelected = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.black87 : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isSelected ? Colors.black87 : Colors.grey[300]!),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? Colors.white : Colors.grey[800],
-          fontSize: 13,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDropdownChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Row(
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey[800], fontSize: 13)),
-          const SizedBox(width: 4),
-          Icon(Icons.keyboard_arrow_down, size: 18, color: Colors.grey[700]),
+          _buildFilterChip('Budget', SortOption.budget),
         ],
       ),
     );
@@ -248,16 +181,16 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         padding: const EdgeInsets.symmetric(horizontal: 16),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isSelected ? Colors.black87 : Colors.white,
+          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? Colors.black87 : Colors.grey[300]!),
+          border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.white12),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[800],
+            color: isSelected ? Colors.black : Colors.white,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 13,
+            fontSize: 12,
           ),
         ),
       ),
@@ -270,11 +203,11 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search, size: 80, color: Colors.grey[200]),
+            Icon(Icons.search, size: 80, color: Colors.white.withValues(alpha: 0.1)),
             const SizedBox(height: 16),
-            Text(
-              'Search for your favorite spots',
-              style: TextStyle(color: Colors.grey[400]),
+            const Text(
+              'What are you craving?',
+              style: TextStyle(color: Colors.white38),
             ),
           ],
         ),
@@ -282,312 +215,189 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     }
 
     if (_results.isEmpty && _dishResults.isEmpty) {
-      return Center(
-        child: Text('No results found', style: TextStyle(color: Colors.grey[400])),
+      return const Center(
+        child: Text('No results found', style: TextStyle(color: Colors.white38)),
       );
     }
 
     return ListView(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [
-        ..._results.map((item) => _buildRestaurantCard(item)).toList(),
-        if (_dishResults.isNotEmpty) _buildRecommendedSection(),
-        const SizedBox(height: 20),
+        if (_dishResults.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Text('Dishes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif')),
+          ),
+          ..._dishResults.map((dish) => _buildDishCard(dish)).toList(),
+        ],
+        if (_results.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Text('Restaurants', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif')),
+          ),
+          ..._results.map((item) => _buildRestaurantCard(item)).toList(),
+        ],
+        const SizedBox(height: 100),
       ],
+    );
+  }
+
+  Widget _buildDishCard(Dish dish) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                dish.imageUrl,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.fastfood, size: 30, color: Colors.white38)),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          dish.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Text(
+                        'DEVELOPING',
+                        style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${dish.restaurantName ?? ''} • ${dish.restaurantAddress ?? ''}',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                      const SizedBox(width: 4),
+                      Text('• ${dish.category ?? 'Main'}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
+                      const Spacer(),
+                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        dish.restaurantRating?.toStringAsFixed(1) ?? '4.0',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildRestaurantCard(RestaurantWithScore item) {
     final r = item.restaurant;
-    final bool isClosed = !item.isOpenNow;
-
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.network(
-                          r.imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.restaurant, color: Colors.grey)),
-                        ),
-                        if (isClosed)
-                          Container(
-                            color: Colors.black.withOpacity(0.4),
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'Opens at Tue, 11:00 am',
-                                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
-                                ),
-                              ),
-                            ),
-                          ),
-                        // Badge on image
-                        Positioned(
-                          top: 12,
-                          left: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '${r.name.split(' ').first} • Tk60',
-                              style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        // Pagination dots
-                        Positioned(
-                          bottom: 12,
-                          left: 0,
-                          right: 0,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(4, (index) => Container(
-                              width: 6,
-                              height: 6,
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: index == 0 ? Colors.white : Colors.white.withOpacity(0.5),
-                              ),
-                            )),
-                          ),
-                        ),
-                        // Ad label
-                        Positioned(
-                          bottom: 12,
-                          right: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('Ad', style: TextStyle(color: Colors.white, fontSize: 10)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Heart icon
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.favorite_border, size: 18, color: Colors.black),
-                  ),
-                ),
-              ],
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                r.imageUrl,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.restaurant, size: 30, color: Colors.white38)),
+              ),
             ),
-          ),
-          // Promo bar
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFD70F64).withOpacity(0.05),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.workspace_premium, color: Color(0xFFD70F64), size: 14),
-                const SizedBox(width: 8),
-                Text(
-                  'PRO Tk50 off delivery with Tk350 spend',
-                  style: TextStyle(color: const Color(0xFFD70F64), fontSize: 11, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        r.name,
-                        style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          r.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.orange, size: 14),
-                        const SizedBox(width: 2),
-                        Text(
-                          r.rating.toStringAsFixed(1),
-                          style: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          ' (5k+)',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                        ),
+                      Text(
+                        item.scoreLabel.toUpperCase(),
+                        style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    r.address,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text('৳' * r.priceTier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                      const SizedBox(width: 4),
+                      Text('• ${r.categoryDisplay}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
+                      if (item.distanceKm != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.near_me, color: Colors.white38, size: 10),
+                        const SizedBox(width: 4),
+                        Text('${item.distanceKm!.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white38, fontSize: 11)),
                       ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'From 65 min • ৳৳৳ • Bangladeshi • Price Match',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.delivery_dining, color: Color(0xFFD70F64), size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      'From Tk64 with Saver',
-                      style: TextStyle(color: Colors.grey[800], fontSize: 12),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_up, color: Colors.orange, size: 14),
-                  ],
-                ),
-              ],
+                      const Spacer(),
+                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        r.rating.toStringAsFixed(1),
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-        ],
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildRecommendedSection() {
-    final query = _searchController.text;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text(
-            'Recommended "$query" for you',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        SizedBox(
-          height: 160,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _dishResults.length,
-            itemBuilder: (context, index) {
-              final dish = _dishResults[index];
-              final restaurant = dish['restaurants'] as Map<String, dynamic>? ?? {};
-              return Container(
-                width: 280,
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        dish['photo_url'] ?? 'https://via.placeholder.com/100',
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  restaurant['name'] ?? '',
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Row(
-                                children: [
-                                  const Icon(Icons.star, color: Colors.orange, size: 12),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    (restaurant['algorithm_score'] ?? 0.0 / 20.0).toStringAsFixed(1),
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            dish['name'] ?? '',
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Tk${dish['price']}',
-                            style: TextStyle(color: Colors.grey[800], fontSize: 13),
-                          ),
-                          const Spacer(),
-                          Row(
-                            children: [
-                              const Icon(Icons.access_time, color: Colors.grey, size: 12),
-                              const SizedBox(width: 4),
-                              Text('20 mins', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.delivery_dining, color: Colors.grey, size: 12),
-                              const SizedBox(width: 4),
-                              Text('Tk 71', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 }
