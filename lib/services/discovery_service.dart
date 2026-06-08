@@ -8,6 +8,11 @@ class DiscoveryService {
     return _repository.searchRestaurants(query, userLat: lat, userLng: lng, sortBy: sortBy);
   }
 
+  /// Search for specific dishes matching the query
+  Future<List<Map<String, dynamic>>> searchDishes(String query) async {
+    return _repository.searchDishes(query);
+  }
+
   Future<List<RestaurantWithScore>> getRanked({double? lat, double? lng, int? limit}) async {
     return _repository.getRanked(userLat: lat, userLng: lng, limit: limit);
   }

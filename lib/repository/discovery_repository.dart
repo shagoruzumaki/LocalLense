@@ -90,7 +90,7 @@ class DiscoveryRepository {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 3.1 — searchRestaurants()
+  // 3.1 — searchRestaurants() - Enhanced to search names & dishes
   // ─────────────────────────────────────────────────────────────────────────
   Future<List<RestaurantWithScore>> searchRestaurants(
       String query, {
@@ -106,31 +106,44 @@ class DiscoveryRepository {
       if (q.isEmpty) return [];
       final pattern = '%$q%';
 
-      // Build base query
-      var dbQuery = _db.from('restaurants').select().eq('active', true);
-      
-      // Filter by category if provided
+      // 1. Search by name
+      var nameQuery = _db.from('restaurants').select().eq('active', true).ilike('name', pattern);
       if (category != null && category != 'All') {
-        dbQuery = dbQuery.eq('category', category.toLowerCase().replaceAll(' ', '_'));
+        nameQuery = nameQuery.eq('category', category.toLowerCase().replaceAll(' ', '_'));
+      }
+      final List byNameRes = await nameQuery;
+
+      // 2. Search by dishes
+      final List dishMatches = await _db.from('dishes')
+          .select('restaurant_id')
+          .ilike('name', pattern);
+      
+      final dishRestaurantIds = dishMatches.map((d) => d['restaurant_id'].toString()).toSet();
+      
+      final Map<String, Restaurant> mergedRestaurants = {};
+      for (var j in byNameRes) {
+        final r = Restaurant.fromSupabase(j);
+        mergedRestaurants[r.id] = r;
       }
 
-      // Add ilike condition across multiple fields or use an OR
-      // For simplicity and efficiency in Supabase without complex OR logic:
-      // We'll search by name first as primary.
-      final List byNameRes = await dbQuery.ilike('name', pattern);
-      final restaurants = byNameRes.map((j) => Restaurant.fromSupabase(j)).toList();
-
-      if (restaurants.isEmpty && q.length >= 2) {
-        // Fallback or secondary search for dishes/tags if name results are zero
-        // This is a simplified version of the merged logic from before
+      if (dishRestaurantIds.isNotEmpty) {
+        var dishRestQuery = _db.from('restaurants').select().eq('active', true).inFilter('id', dishRestaurantIds.toList());
+        if (category != null && category != 'All') {
+          dishRestQuery = dishRestQuery.eq('category', category.toLowerCase().replaceAll(' ', '_'));
+        }
+        final List byDishRes = await dishRestQuery;
+        for (var j in byDishRes) {
+          final r = Restaurant.fromSupabase(j);
+          mergedRestaurants[r.id] = r;
+        }
       }
 
-      if (restaurants.isEmpty) return [];
+      if (mergedRestaurants.isEmpty) return [];
 
+      final restaurants = mergedRestaurants.values.toList();
       final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
       var result = _enrich(restaurants, scores, userLat, userLng);
       
-      // Filter Open Now
       if (openNow) {
         result = result.where((r) => r.isOpenNow).toList();
       }
@@ -148,7 +161,25 @@ class DiscoveryRepository {
 
       return result.take(limit).toList();
     } catch (e) {
-      rethrow;
+      return [];
+    }
+  }
+
+  /// Search for specific dishes matching the query for "Recommended for you" section
+  Future<List<Map<String, dynamic>>> searchDishes(String query, {int limit = 10}) async {
+    try {
+      final q = query.trim();
+      if (q.isEmpty) return [];
+      
+      final List response = await _db.from('dishes')
+          .select('*, restaurants(name, rating, algorithm_score)')
+          .ilike('name', '%$q%')
+          .eq('is_available', true)
+          .limit(limit);
+          
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      return [];
     }
   }
 
