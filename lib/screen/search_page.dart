@@ -24,13 +24,15 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   double? _userLat;
   double? _userLng;
 
-  // Filters
-  SortOption _selectedSort = SortOption.score;
-
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {}); // Update UI when tab changes
+      }
+    });
     _initLocation();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocus.requestFocus();
@@ -73,22 +75,22 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     setState(() => _isLoading = true);
 
     try {
-      // 1. Search for restaurants by NAME ONLY (searchByDish: false)
-      final results = await _discoveryService.searchRestaurants(
+      // Perform both searches
+      final resultsFuture = _discoveryService.searchRestaurants(
         query,
         lat: _userLat,
         lng: _userLng,
-        sortBy: _selectedSort,
-        searchByDish: false, // Don't show restaurant cards for dish matches
+        searchByDish: false,
       );
       
-      // 2. Search for dishes specifically
-      final dishes = await _discoveryService.searchDishes(query);
+      final dishesFuture = _discoveryService.searchDishes(query);
+
+      final responses = await Future.wait([resultsFuture, dishesFuture]);
 
       if (mounted) {
         setState(() {
-          _results = results;
-          _dishResults = dishes;
+          _results = responses[0] as List<RestaurantWithScore>;
+          _dishResults = responses[1] as List<Dish>;
           _isLoading = false;
         });
       }
@@ -100,145 +102,121 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: Container(
-          height: 40,
+          height: 45,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(20),
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(25),
           ),
           child: TextField(
             controller: _searchController,
             focusNode: _searchFocus,
             onChanged: (value) => _performSearch(),
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: const TextStyle(color: Colors.black87, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Search for dishes or places...',
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 14),
-              prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5), size: 20),
+              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
+              prefixIcon: Icon(Icons.search, color: Colors.grey[600], size: 20),
+              suffixIcon: _searchController.text.isNotEmpty 
+                  ? IconButton(
+                      icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+                      onPressed: () {
+                        _searchController.clear();
+                        _performSearch();
+                      },
+                    )
+                  : null,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
         ),
-        actions: [
-          if (_searchController.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.cancel, color: Colors.white54, size: 20),
-              onPressed: () {
-                _searchController.clear();
-                _performSearch();
-              },
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
             ),
-        ],
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: const Color(0xFFD70F64),
+              indicatorWeight: 3,
+              labelColor: const Color(0xFFD70F64),
+              unselectedLabelColor: Colors.grey[600],
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              tabs: const [
+                Tab(text: 'Restaurants'),
+                Tab(text: 'Menu items'),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: Column(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFD70F64)))
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRestaurantResults(),
+                _buildDishResults(),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildRestaurantResults() {
+    if (_searchController.text.isEmpty) return _buildInitialView();
+    if (_results.isEmpty) return _buildNoResultsView();
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      itemCount: _results.length,
+      itemBuilder: (context, index) => _buildRestaurantCard(_results[index]),
+    );
+  }
+
+  Widget _buildDishResults() {
+    if (_searchController.text.isEmpty) return _buildInitialView();
+    if (_dishResults.isEmpty) return _buildNoResultsView();
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _dishResults.length,
+      itemBuilder: (context, index) => _buildDishCard(_dishResults[index]),
+    );
+  }
+
+  Widget _buildInitialView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildFilterBar(),
-          const Divider(color: Colors.white10, height: 1),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
-                : _buildResultsList(),
-          ),
+          Icon(Icons.search, size: 80, color: Colors.grey[200]),
+          const SizedBox(height: 16),
+          Text('Search for your favorite spots', style: TextStyle(color: Colors.grey[400])),
         ],
       ),
     );
   }
 
-  Widget _buildFilterBar() {
-    return SizedBox(
-      height: 50,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  Widget _buildNoResultsView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildFilterChip('Best Score', SortOption.score),
-          const SizedBox(width: 8),
-          _buildFilterChip('Nearest', SortOption.nearest),
-          const SizedBox(width: 8),
-          _buildFilterChip('Budget', SortOption.budget),
+          Icon(Icons.search_off, size: 60, color: Colors.grey[200]),
+          const SizedBox(height: 16),
+          Text('No results found', style: TextStyle(color: Colors.grey[400])),
         ],
       ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, SortOption option) {
-    final isSelected = _selectedSort == option;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _selectedSort = option);
-        _performSearch();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.white12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResultsList() {
-    if (_searchController.text.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search, size: 80, color: Colors.white.withValues(alpha: 0.1)),
-            const SizedBox(height: 16),
-            const Text(
-              'What are you craving?',
-              style: TextStyle(color: Colors.white38),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_results.isEmpty && _dishResults.isEmpty) {
-      return const Center(
-        child: Text('No results found', style: TextStyle(color: Colors.white38)),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      children: [
-        if (_dishResults.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Text('Dishes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif')),
-          ),
-          ..._dishResults.map((dish) => _buildDishCard(dish)).toList(),
-        ],
-        if (_results.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Text('Restaurants', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif')),
-          ),
-          ..._results.map((item) => _buildRestaurantCard(item)).toList(),
-        ],
-        const SizedBox(height: 100),
-      ],
     );
   }
 
@@ -247,26 +225,29 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
       onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                dish.imageUrl,
-                width: 80,
-                height: 80,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.fastfood, size: 30, color: Colors.white38)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  dish.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(color: Colors.grey[100]),
+                ),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -274,39 +255,22 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          dish.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: Text(dish.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
-                      const Text(
-                        'DEVELOPING',
-                        style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
+                      Text('Tk ${dish.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFFD70F64))),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${dish.restaurantName ?? ''} • ${dish.restaurantAddress ?? ''}',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
-                      const SizedBox(width: 4),
-                      Text('• ${dish.category ?? 'Main'}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
-                      const Spacer(),
-                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        dish.restaurantRating?.toStringAsFixed(1) ?? '4.0',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      Expanded(
+                        child: Text('${dish.restaurantName} • ${dish.restaurantAddress ?? "Sylhet"}', style: TextStyle(color: Colors.grey[600], fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
+                      if (dish.restaurantRating != null) ...[
+                        const Icon(Icons.star, color: Colors.orange, size: 14),
+                        const SizedBox(width: 2),
+                        Text(dish.restaurantRating!.toStringAsFixed(1), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      ],
                     ],
                   ),
                 ],
@@ -323,73 +287,32 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
         ),
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                r.imageUrl,
-                width: 80,
-                height: 80,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.restaurant, size: 30, color: Colors.white38)),
-              ),
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(r.imageUrl, width: 70, height: 70, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[100])),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          r.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        item.scoreLabel.toUpperCase(),
-                        style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
+                  Text(r.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(
-                    r.address,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
+                  Text(r.categoryDisplay, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text('৳' * r.priceTier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
-                      const SizedBox(width: 4),
-                      Text('• ${r.categoryDisplay}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
-                      if (item.distanceKm != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.near_me, color: Colors.white38, size: 10),
-                        const SizedBox(width: 4),
-                        Text('${item.distanceKm!.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                      ],
-                      const Spacer(),
-                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        r.rating.toStringAsFixed(1),
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
+                      const Icon(Icons.star, color: Colors.orange, size: 14),
+                      const SizedBox(width: 2),
+                      Text(r.rating.toStringAsFixed(1), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      Text('• ${r.address}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                     ],
                   ),
                 ],

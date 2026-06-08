@@ -16,7 +16,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   final RestaurantService _restaurantService = RestaurantService();
   final Top10Service _top10Service = Top10Service();
   final LocationService _locationService = LocationService();
@@ -26,6 +26,7 @@ class _HomePageState extends State<HomePage> {
   late Future<List<RestaurantWithScore>> _nearbyRestaurantsFuture;
   late Future<List<Restaurant>> _top10RestaurantsFuture;
   late Future<List<Map<String, dynamic>>> _top10CriticsFuture;
+  late TabController _searchTabController;
   
   String _neighbourhood = 'Nearby';
   double? _userLat;
@@ -42,11 +43,24 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _searchTabController = TabController(length: 2, vsync: this);
+    _searchTabController.addListener(() {
+      if (!_searchTabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
     _top10RestaurantsFuture = _top10Service.getTopRestaurantsByPeriod(filter: 'alltime');
     _top10CriticsFuture = _top10Service.getTopCritics(filter: 'alltime');
     _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: 23.8103, lng: 90.4125, radiusKm: 10);
     _loadData();
     _fetchUserPhoto();
+  }
+
+  @override
+  void dispose() {
+    _searchTabController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchUserPhoto() async {
@@ -102,8 +116,6 @@ class _HomePageState extends State<HomePage> {
       _isLoadingSearch = true;
     });
     try {
-      // 1. Search for restaurants by NAME ONLY (searchByDish: false)
-      // 2. Search for dishes specifically
       final results = await _discoveryService.searchRestaurants(
         query, 
         lat: _userLat, 
@@ -112,7 +124,6 @@ class _HomePageState extends State<HomePage> {
         searchByDish: false, // Don't show restaurant cards for dish matches
       );
       final dishes = await _discoveryService.searchDishes(query);
-      
       if (mounted) {
         setState(() {
           _searchResults = results;
@@ -186,6 +197,19 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 if (_isSearching) ...[
+                  const SizedBox(height: 10),
+                  TabBar(
+                    controller: _searchTabController,
+                    indicatorColor: const Color(0xFFD70F64),
+                    indicatorWeight: 3,
+                    labelColor: const Color(0xFFD70F64),
+                    unselectedLabelColor: Colors.white38,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    tabs: const [
+                      Tab(text: 'Restaurants'),
+                      Tab(text: 'Menu items'),
+                    ],
+                  ),
                   const SizedBox(height: 15),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -257,54 +281,41 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildSearchResults() {
     if (_isLoadingSearch) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFFFFD700))));
-    if (_searchResults.isEmpty && _dishResults.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No results found', style: TextStyle(color: Colors.white38))));
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_dishResults.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Text('Menu Items', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif')),
-          ),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _dishResults.length,
-            itemBuilder: (context, index) => _buildDishItem(context: context, dish: _dishResults[index]),
-          ),
-        ],
-        if (_searchResults.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Text('Restaurants', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif')),
-          ),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _searchResults.length,
-            itemBuilder: (context, index) {
-              final item = _searchResults[index];
-              final r = item.restaurant;
-              return _buildOpenNowItem(
-                context: context,
-                title: r.name,
-                location: r.address,
-                priceText: '৳' * r.priceTier,
-                category: r.categoryDisplay,
-                rating: r.rating.toStringAsFixed(1),
-                imageUrl: r.imageUrl,
-                scoreLabel: item.scoreLabel.toUpperCase(),
-                distance: item.distanceKm,
-                onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
-              );
-            },
-          ),
-        ],
-      ],
-    );
+    if (_searchTabController.index == 0) {
+      if (_searchResults.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No restaurants found', style: TextStyle(color: Colors.white38))));
+      return ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _searchResults.length,
+        itemBuilder: (context, index) {
+          final item = _searchResults[index];
+          final r = item.restaurant;
+          return _buildOpenNowItem(
+            context: context,
+            title: r.name,
+            location: r.address,
+            priceText: '৳' * r.priceTier,
+            category: r.categoryDisplay,
+            rating: r.rating.toStringAsFixed(1),
+            imageUrl: r.imageUrl,
+            scoreLabel: item.scoreLabel.toUpperCase(),
+            distance: item.distanceKm,
+            onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+          );
+        },
+      );
+    } else {
+      if (_dishResults.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No menu items found', style: TextStyle(color: Colors.white38))));
+      return ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _dishResults.length,
+        itemBuilder: (context, index) => _buildDishItem(context: context, dish: _dishResults[index]),
+      );
+    }
   }
 
   Widget _buildMainContent() {
@@ -577,9 +588,9 @@ class _HomePageState extends State<HomePage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        'DEVELOPING', // Menu card style usually shows score label
-                        style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
+                      const Text(
+                        'DEVELOPING',
+                        style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
