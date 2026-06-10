@@ -84,7 +84,9 @@ class DiscoveryRepository {
       final List response = await _db.from('dishes')
           .select('*, restaurants!inner(*)')
           .eq('is_available', true)
-          .lte('price', 200) 
+          .gte('price', 1)
+          .lte('price', 250) 
+          .order('restaurants(algorithm_score)', ascending: false)
           .order('price', ascending: true)
           .limit(limit);
       return response.map((json) => Dish.fromSupabase(json)).toList();
@@ -163,7 +165,9 @@ class DiscoveryRepository {
     }
   }
 
+  // ─────────────────────────────────────────────
   // 🗺️ Explore by Area - Improved for live location formatting
+  // ─────────────────────────────────────────────
   Future<List<String>> getAreas({double? userLat, double? userLng}) async {
     try {
       final List response = await _db.from('restaurants')

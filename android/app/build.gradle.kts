@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -25,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.local_lense"
-        // minSdk 21 is required for Firebase, Maps, and modern notification features
+        // minSdk 21 is required for Maps and modern notification features
         minSdk = flutter.minSdkVersion 
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -44,9 +43,6 @@ android {
 dependencies {
     // Verified stable version for desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-    
-    implementation("com.google.firebase:firebase-messaging-ktx:24.0.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 }
 
 flutter {

@@ -1,5 +1,3 @@
-import 'restaurant.dart';
-
 class Dish {
   final String id;
   final String restaurantId;

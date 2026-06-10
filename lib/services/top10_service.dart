@@ -40,6 +40,8 @@ class Top10Service {
           .gte('created_at', startDate);
       
       final reviews = reviewsResp as List;
+      
+      // If no reviews in this period, fallback to all-time leaderboard
       if (reviews.isEmpty) return await getAllTimeLeaderboard();
 
       Map<String, List<double>> periodRatings = {};
@@ -49,19 +51,29 @@ class Top10Service {
       }
 
       var sortedIds = periodRatings.keys.toList();
-      sortedIds.sort((a, b) {
-        double avgA = periodRatings[a]!.reduce((v, e) => v + e) / periodRatings[a]!.length;
-        double avgB = periodRatings[b]!.reduce((v, e) => v + e) / periodRatings[b]!.length;
-        return avgB.compareTo(avgA);
-      });
-
+      
+      // Fetch restaurant data for these IDs
       final restaurantsResp = await _supabase
           .from('restaurants')
           .select('*')
           .inFilter('id', sortedIds)
           .eq('active', true);
           
-      final results = (restaurantsResp as List).map((j) => Restaurant.fromSupabase(j)).toList();
+      final results = (restaurantsResp as List).map((j) {
+        final id = j['id'].toString();
+        // Calculate the average rating specifically for this period
+        final periodAvg = periodRatings[id]!.reduce((v, e) => v + e) / periodRatings[id]!.length;
+        
+        // Create a modified JSON to override all-time scores with period-specific performance
+        final modifiedJson = Map<String, dynamic>.from(j);
+        // Force the Restaurant.rating getter to use our calculated period average
+        modifiedJson['algorithm_score'] = null; 
+        modifiedJson['rating'] = periodAvg;
+        
+        return Restaurant.fromSupabase(modifiedJson);
+      }).toList();
+      
+      // Sort by the period-specific rating
       results.sort((a, b) => b.rating.compareTo(a.rating));
       return results;
     } catch (e) {
@@ -69,7 +81,7 @@ class Top10Service {
     }
   }
 
-  /// Fetches Critics leaderboard (Lifetime)
+  /// Fetches Critics leaderboard (Lifetime or Period)
   Future<List<Map<String, dynamic>>> getTopCritics({String filter = 'alltime'}) async {
     try {
       if (filter == 'alltime') {
@@ -84,12 +96,13 @@ class Top10Service {
             ...user,
             'rank_score': (user['helpful_votes'] as int? ?? 0) * _getTierMultiplier(user['tier']?.toString() ?? 'explorer'),
           };
-        }).toList();
+        }).toList()..sort((a, b) => (b['rank_score'] as int).compareTo(a['rank_score'] as int));
       }
 
       final days = filter == 'week' ? 7 : 30;
       final startDate = DateTime.now().subtract(Duration(days: days)).toUtc().toIso8601String();
 
+      // For period-based critics, we look at helpful votes gained from reviews posted in that period
       final response = await _supabase
           .from('reviews')
           .select('user_id, helpful_votes')
@@ -105,7 +118,6 @@ class Top10Service {
       }
 
       var topUids = periodVotes.keys.toList();
-      topUids.sort((a, b) => periodVotes[b]!.compareTo(periodVotes[a]!));
 
       final usersResp = await _supabase
           .from('users')
@@ -114,9 +126,11 @@ class Top10Service {
       
       return (usersResp as List).map((u) {
         final user = Map<String, dynamic>.from(u);
+        final votesInPeriod = periodVotes[user['id']] ?? 0;
         return {
           ...user,
-          'rank_score': periodVotes[user['id']] ?? 0,
+          'helpful_votes': votesInPeriod, // Display votes gained in this period
+          'rank_score': votesInPeriod * _getTierMultiplier(user['tier']?.toString() ?? 'explorer'),
         };
       }).toList()..sort((a, b) => (b['rank_score'] as int).compareTo(a['rank_score'] as int));
 
