@@ -21,8 +21,8 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.9.1" apply false
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
-    // Temporarily disabled until google-services.json is added
-    // id("com.google.gms.google-services") version "4.4.2" apply false
+    // Enable the Google Services plugin
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")
