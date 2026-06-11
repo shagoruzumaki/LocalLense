@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/discovery_service.dart';
 import '../services/top10_service.dart';
 import '../services/location_service.dart';
 import '../services/restaurant_service.dart';
 import '../model/restaurant.dart';
-import '../repository/discovery_repository.dart';
+import '../model/dish.dart';
 
 class DiscoveryFeedPage extends StatefulWidget {
   const DiscoveryFeedPage({super.key});
@@ -24,6 +25,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   List<RestaurantWithScore> _topRankedNearYou = [];
   List<Restaurant> _top10Restaurants = [];
   List<Map<String, dynamic>> _top10Critics = [];
+  List<Dish> _budgetEats = [];
   List<RestaurantWithScore> _searchResults = [];
   
   bool _isLoading = true;
@@ -33,14 +35,46 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   double? _userLat;
   double? _userLng;
 
+  StreamSubscription? _reviewSubscription;
+  StreamSubscription? _restaurantSubscription;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _setupRealtime();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _reviewSubscription?.cancel();
+    _restaurantSubscription?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────
+  // Real-time updates: Automatically refresh data
+  // when any review or restaurant record changes
+  // ─────────────────────────────────────────────
+  void _setupRealtime() {
+    final supabase = Supabase.instance.client;
+    
+    // Listen for new reviews or changes to trigger refresh
+    _reviewSubscription = supabase
+        .from('reviews')
+        .stream(primaryKey: ['id'])
+        .listen((_) => _loadData(silent: true));
+
+    // Listen for restaurant changes (score updates, etc.)
+    _restaurantSubscription = supabase
+        .from('restaurants')
+        .stream(primaryKey: ['id'])
+        .listen((_) => _loadData(silent: true));
+  }
+
+  Future<void> _loadData({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
     try {
       final hasPermission = await _locationService.checkPermission();
       if (hasPermission) {
@@ -56,15 +90,17 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
 
       final results = await Future.wait([
         _discoveryService.getNearby(lat: _userLat!, lng: _userLng!, radiusKm: 10),
-        _top10Service.getTop10Restaurants(filter: 'alltime'),
-        _top10Service.getTop10Critics(filter: 'alltime'),
+        _top10Service.getTopRestaurantsByPeriod(filter: 'alltime'),
+        _top10Service.getTopCritics(filter: 'alltime'),
+        _discoveryService.getBudgetEats(lat: _userLat, lng: _userLng),
       ]);
 
       if (mounted) {
         setState(() {
-          _topRankedNearYou = results[0] as List<RestaurantWithScore>;
-          _top10Restaurants = results[1] as List<Restaurant>;
-          _top10Critics = results[2] as List<Map<String, dynamic>>;
+          _topRankedNearYou = (results[0] as List<RestaurantWithScore>).take(10).toList();
+          _top10Restaurants = (results[1] as List<Restaurant>).take(10).toList();
+          _top10Critics = (results[2] as List<Map<String, dynamic>>).take(10).toList();
+          _budgetEats = results[3] as List<Dish>;
           _isLoading = false;
         });
       }
@@ -276,6 +312,10 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                       );
                     }).toList(), icon: Icons.verified_user_outlined),
                     const SizedBox(height: 30),
+                    
+                    // ─────────────────────────────────────────────
+                    // TOP RANKED NEAR YOU
+                    // ─────────────────────────────────────────────
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -314,6 +354,56 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                                 r.scoreLabel.toUpperCase(),
                                 imageUrl: r.restaurant.imageUrl,
                                 onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.restaurant.id),
+                              );
+                            },
+                          ),
+                    ),
+                    const SizedBox(height: 30),
+
+                    // ─────────────────────────────────────────────
+                    // 💰 BEST BUDGET EATS
+                    // ─────────────────────────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Text('💰', style: TextStyle(fontSize: 18)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Best Budget Eats',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'serif',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Text(
+                          'UNDER ৳ 250',
+                          style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      height: 220,
+                      child: _budgetEats.isEmpty 
+                        ? const Center(child: Text('No budget eats found', style: TextStyle(color: Colors.white54)))
+                        : ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _budgetEats.length,
+                            itemBuilder: (context, index) {
+                              final dish = _budgetEats[index];
+                              return _buildDishCard(
+                                dish.name,
+                                dish.restaurantName ?? 'Unknown',
+                                '৳ ${dish.price.toStringAsFixed(0)}',
+                                dish.restaurantRating?.toStringAsFixed(1) ?? '0.0',
+                                imageUrl: dish.imageUrl,
+                                onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: dish.restaurantId),
                               );
                             },
                           ),
@@ -526,6 +616,58 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDishCard(String title, String restaurant, String price, String rating, {String? imageUrl, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 180,
+        margin: const EdgeInsets.only(right: 15),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 120,
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                color: Colors.white10,
+                image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover) : null,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(restaurant, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(price, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Color(0xFFFFD700), size: 12),
+                          const SizedBox(width: 2),
+                          Text(rating, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

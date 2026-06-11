@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -28,20 +29,51 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
   String _category = '';
   String _address = '';
 
+  StreamSubscription? _scoreSubscription;
+  StreamSubscription? _restaurantSubscription;
+
   @override
   void initState() {
     super.initState();
     _fetchScoreData();
+    _setupRealtime();
+  }
+
+  @override
+  void dispose() {
+    _scoreSubscription?.cancel();
+    _restaurantSubscription?.cancel();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────
+  // Real-time updates: Automatically refresh when
+  // scores or restaurant data change
+  // ─────────────────────────────────────────────
+  void _setupRealtime() {
+    _scoreSubscription = _supabase
+        .from('algorithm_scores')
+        .stream(primaryKey: ['id'])
+        .eq('restaurant_id', widget.restaurantId)
+        .listen((_) => _fetchScoreData(silent: true));
+
+    _restaurantSubscription = _supabase
+        .from('restaurants')
+        .stream(primaryKey: ['id'])
+        .eq('id', widget.restaurantId)
+        .listen((_) => _fetchScoreData(silent: true));
   }
 
   // ─────────────────────────────────────────────
   // Fetch score breakdown + restaurant info
   // ─────────────────────────────────────────────
-  Future<void> _fetchScoreData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _fetchScoreData({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       // Fetch both in parallel
@@ -51,42 +83,58 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
             .from('algorithm_scores')
             .select('quality_score, trust_score, popularity_score, review_count')
             .eq('restaurant_id', widget.restaurantId)
-            .single(),
+            .maybeSingle(),
 
         // restaurants table for name, category, address, final score
         _supabase
             .from('restaurants')
             .select('name, category, address, algorithm_score')
             .eq('id', widget.restaurantId)
-            .single(),
+            .maybeSingle(),
       ]);
 
-      final scores = results[0] as Map<String, dynamic>;
-      final restaurant = results[1] as Map<String, dynamic>;
+      final scores = results[0] as Map<String, dynamic>?;
+      final restaurant = results[1] as Map<String, dynamic>?;
 
-      setState(() {
-        // Score components
-        _qualityScore = (scores['quality_score'] as num?)?.toDouble() ?? 0;
-        _trustScore = (scores['trust_score'] as num?)?.toDouble() ?? 0;
-        _popularityScore = (scores['popularity_score'] as num?)?.toDouble() ?? 0;
-        _reviewCount = (scores['review_count'] as int?) ?? 0;
+      if (restaurant == null) {
+        if (mounted) {
+          setState(() {
+            _error = 'Restaurant not found.';
+            _loading = false;
+          });
+        }
+        return;
+      }
 
-        // Final composite score from restaurants table
-        _finalScore = (restaurant['algorithm_score'] as num?)?.toDouble() ?? 0;
-        _scoreLabel = _getScoreLabel(_finalScore);
+      if (mounted) {
+        setState(() {
+          // Score components
+          if (scores != null) {
+            _qualityScore = (scores['quality_score'] as num?)?.toDouble() ?? 0;
+            _trustScore = (scores['trust_score'] as num?)?.toDouble() ?? 0;
+            _popularityScore = (scores['popularity_score'] as num?)?.toDouble() ?? 0;
+            _reviewCount = (scores['review_count'] as int?) ?? 0;
+          }
 
-        // Restaurant info
-        _restaurantName = restaurant['name'] as String? ?? '';
-        _category = (restaurant['category'] as String? ?? '').toUpperCase();
-        _address = restaurant['address'] as String? ?? '';
+          // Final composite score from restaurants table
+          _finalScore = (restaurant['algorithm_score'] as num?)?.toDouble() ?? 0;
+          _scoreLabel = _getScoreLabel(_finalScore);
 
-        _loading = false;
-      });
+          // Restaurant info
+          _restaurantName = restaurant['name'] as String? ?? '';
+          _category = (restaurant['category'] as String? ?? '').toUpperCase();
+          _address = restaurant['address'] as String? ?? '';
+
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Failed to load score data.';
-        _loading = false;
-      });
+      if (mounted && !silent) {
+        setState(() {
+          _error = 'Failed to load score data.';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -104,22 +152,6 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
   // Convert 0-100 score to 0.0-1.0 for progress bar
   // ─────────────────────────────────────────────
   double _toProgress(double score) => (score / 100).clamp(0.0, 1.0);
-
-  // ─────────────────────────────────────────────
-  // Score label color
-  // ─────────────────────────────────────────────
-  Color _getLabelColor(String label) {
-    switch (label) {
-      case 'Elite':
-        return Colors.cyanAccent;
-      case 'Excellent':
-        return const Color(0xFFFFD700);
-      case 'Good':
-        return Colors.greenAccent;
-      default:
-        return Colors.orangeAccent;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +190,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                 style: const TextStyle(color: Colors.white38)),
             const SizedBox(height: 16),
             TextButton(
-              onPressed: _fetchScoreData,
+              onPressed: () => _fetchScoreData(),
               child: const Text('Retry',
                   style: TextStyle(color: Color(0xFFFFD700))),
             ),
@@ -190,7 +222,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withValues(alpha: 0.2),
+                        Colors.black.withOpacity(0.2),
                         const Color(0xFF0D0D0D)
                       ],
                     ),
@@ -263,7 +295,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                         Text(
                           ' / 100',
                           style: TextStyle(
-                              color: Colors.black.withValues(alpha: 0.5),
+                              color: Colors.black.withOpacity(0.5),
                               fontSize: 24,
                               fontWeight: FontWeight.bold),
                         ),
@@ -276,7 +308,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.15),
+                        color: Colors.black.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -293,7 +325,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                     Text(
                       'Based on $_reviewCount reviews',
                       style: TextStyle(
-                          color: Colors.black.withValues(alpha: 0.5),
+                          color: Colors.black.withOpacity(0.5),
                           fontSize: 12),
                     ),
                     const SizedBox(height: 24),
@@ -336,7 +368,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.1),
+                        color: Colors.black.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Row(
@@ -409,132 +441,13 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                   _buildBreakdownCard(
                     icon: Icons.near_me_outlined,
                     title: 'Proximity Score',
-                    score: null, // per-user, not stored
+                    score: null,
                     weight: '15%',
                     description:
                     'Calculated in real-time based on your GPS location. Closed restaurants lose 30% of this score.',
                     color: Colors.purpleAccent,
                   ),
                 ],
-              ),
-            ),
-
-            // ── Quick Info ──────────────────────────────
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  _buildQuickInfoCard(
-                      Icons.access_time, 'Open Now', 'UNTIL 2 AM'),
-                  const SizedBox(width: 12),
-                  _buildQuickInfoCard(
-                      Icons.restaurant_menu, 'Tasting', 'MENU ONLY'),
-                  const SizedBox(width: 12),
-                  _buildQuickInfoCard(Icons.confirmation_number_outlined,
-                      'Waitlist', '15-20 MIN'),
-                ],
-              ),
-            ),
-
-            // ── Tabs ────────────────────────────────────
-            const SizedBox(height: 30),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  _TabItem(label: 'Overview', isSelected: true),
-                  SizedBox(width: 24),
-                  _TabItem(label: 'Reviews'),
-                  SizedBox(width: 24),
-                  _TabItem(label: 'Photos'),
-                ],
-              ),
-            ),
-
-            // ── The Vibe ────────────────────────────────
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('The Vibe',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'serif')),
-                  SizedBox(height: 12),
-                  Text(
-                    'Yūgen brings the kinetic energy of a Shinjuku alleyway to the heart of the city. Expect dimly lit charcoal interiors, neon accents, and an uncompromising approach to seasonal fermentation and wood-fired grilling.',
-                    style:
-                    TextStyle(color: Colors.white70, height: 1.5),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Map Preview ─────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      height: 120,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15),
-                        image: const DecorationImage(
-                          image: NetworkImage(
-                              'https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=500&auto=format&fit=crop'),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                              color: Color(0xFFFFD700),
-                              shape: BoxShape.circle),
-                          child: const Icon(Icons.location_on,
-                              color: Colors.black, size: 20),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _address.isEmpty
-                                    ? '420 Lantern Way, District 7'
-                                    : _address,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              const Text('DIRECTIONS • 5 MIN DRIVE',
-                                  style: TextStyle(
-                                      color: Colors.white38,
-                                      fontSize: 10)),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.near_me_outlined,
-                            color: Color(0xFFFFD700)),
-                      ],
-                    ),
-                  ],
-                ),
               ),
             ),
 
@@ -553,7 +466,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
               padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: Colors.white.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(color: Colors.white10),
               ),
@@ -623,7 +536,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                 if (subtitle.isNotEmpty)
                   Text(subtitle,
                       style: TextStyle(
-                          color: Colors.black.withValues(alpha: 0.4),
+                          color: Colors.black.withOpacity(0.4),
                           fontSize: 9)),
               ],
             ),
@@ -639,7 +552,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
           borderRadius: BorderRadius.circular(2),
           child: LinearProgressIndicator(
             value: progress,
-            backgroundColor: Colors.black.withValues(alpha: 0.1),
+            backgroundColor: Colors.black.withOpacity(0.1),
             valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
             minHeight: 3,
           ),
@@ -662,7 +575,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: Colors.white.withOpacity(0.04),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
       ),
@@ -673,7 +586,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -697,7 +610,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.15),
+                        color: color.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(weight,
@@ -727,7 +640,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                         child: LinearProgressIndicator(
                           value: _toProgress(score),
                           backgroundColor:
-                          Colors.white.withValues(alpha: 0.08),
+                          Colors.white.withOpacity(0.08),
                           valueColor:
                           AlwaysStoppedAnimation<Color>(color),
                           minHeight: 6,
@@ -739,7 +652,7 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
                     : Text(
                   'Calculated per user',
                   style: TextStyle(
-                      color: color.withValues(alpha: 0.7),
+                      color: color.withOpacity(0.7),
                       fontSize: 13,
                       fontStyle: FontStyle.italic),
                 ),
@@ -754,70 +667,6 @@ class _ScoreBreakdownPageState extends State<ScoreBreakdownPage> {
           ),
         ],
       ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  // QUICK INFO CARD
-  // ─────────────────────────────────────────────
-  Widget _buildQuickInfoCard(
-      IconData icon, String title, String subtitle) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: const Color(0xFFFFD700), size: 24),
-            const SizedBox(height: 8),
-            Text(title,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold)),
-            Text(subtitle,
-                style: const TextStyle(
-                    color: Colors.white38, fontSize: 10)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════
-// TAB ITEM WIDGET
-// ═══════════════════════════════════════════════
-class _TabItem extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  const _TabItem({required this.label, this.isSelected = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color:
-            isSelected ? const Color(0xFFFFD700) : Colors.white38,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        if (isSelected)
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            height: 2,
-            width: 40,
-            color: const Color(0xFFFFD700),
-          ),
-      ],
     );
   }
 }
