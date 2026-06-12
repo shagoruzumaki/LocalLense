@@ -5,7 +5,7 @@
 class AppConstants {
   // Gemini API Key (Google AI Studio — free tier)
   // Get yours at: aistudio.google.com
-  static const String geminiApiKey = 'AQ.Ab8RN6LwuU4q_XpRsqZ0MuAfL7XtU2MYxJm6wLYH8Rb53-FRCA';
+  static const String geminiApiKey = 'AQ.Ab8RN6LZkGJqfNwvwlKc4H6DCy-AsuxjQmlXnnK-lpub7theUA';
 
   // Supabase config (get from Member 1 — Ismail)
   static const String supabaseUrl = 'https://bevgjdxwozuezcunizho.supabase.co';

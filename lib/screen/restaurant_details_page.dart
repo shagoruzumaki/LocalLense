@@ -56,9 +56,12 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     }
   }
 
-  Future<void> _fetchDetails(String id) async {
+  /// Fetches restaurant details and score.
+  /// [showLoader] allows for silent refreshes after submission.
+  Future<void> _fetchDetails(String id, {bool showLoader = true}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (showLoader) setState(() => _isLoading = true);
+    
     try {
       final detail = await _discoveryService.getRestaurantDetail(id);
       final score = await _discoveryService.getScoreBreakdown(id);
@@ -74,6 +77,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+      debugPrint('[RestaurantDetails] Error fetching details: $e');
     }
   }
 
@@ -192,9 +196,11 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         restaurantId: _data!.restaurant.id,
         reviewApi: _reviewApi,
         onSubmitted: () {
-          _loadReviews(_data!.restaurant.id);
-          // Reload AI summary after new review — may have triggered regeneration
-          _loadAiSummary(_data!.restaurant.id);
+          final id = _data!.restaurant.id;
+          // Silent refresh of everything to update UI properly
+          _fetchDetails(id, showLoader: false);
+          _loadReviews(id);
+          _loadDishes(id);
           setState(() => _selectedTab = 2);
         },
       ),
@@ -701,7 +707,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   // MENU TAB
   // ─────────────────────────────────────────────
   Widget _buildMenuTab() {
-    if (_loadingDishes) {
+    if (_loadingReviews) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 60),
@@ -1620,9 +1626,6 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   }
 }
 
-// ═══════════════════════════════════════════════
-// MOOD BUTTON
-// ═══════════════════════════════════════════════
 class _MoodButton extends StatelessWidget {
   final String emoji;
   final String label;
