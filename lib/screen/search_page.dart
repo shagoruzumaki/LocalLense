@@ -2,36 +2,63 @@ import 'package:flutter/material.dart';
 import '../services/discovery_service.dart';
 import '../services/location_service.dart';
 import '../model/restaurant.dart';
+import '../model/dish.dart';
 
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
+  final String? initialQuery;
+  const SearchPage({super.key, this.initialQuery});
 
   @override
   State<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage> {
+class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateMixin {
   final DiscoveryService _discoveryService = DiscoveryService();
   final LocationService _locationService = LocationService();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  late TabController _tabController;
 
   List<RestaurantWithScore> _results = [];
+  List<Dish> _dishResults = [];
   bool _isLoading = false;
   double? _userLat;
   double? _userLng;
 
-  // Filters
-  SortOption _selectedSort = SortOption.score;
-  bool _filterOpenNow = false;
-
   @override
   void initState() {
     super.initState();
-    _initLocation();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _searchFocus.requestFocus();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {}); 
+      }
     });
+
+    if (widget.initialQuery != null) {
+      _searchController.text = widget.initialQuery!;
+      _performSearch();
+    }
+
+    _initLocation().then((_) {
+      if (widget.initialQuery != null) {
+        _performSearch();
+      }
+    });
+
+    if (widget.initialQuery == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _initLocation() async {
@@ -52,25 +79,31 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _performSearch() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) {
-      setState(() => _results = []);
+      setState(() {
+        _results = [];
+        _dishResults = [];
+      });
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final results = await _discoveryService.searchRestaurants(
+      final resultsFuture = _discoveryService.searchRestaurants(
         query,
         lat: _userLat,
         lng: _userLng,
-        sortBy: _selectedSort,
+        searchByDish: true,
       );
+      
+      final dishesFuture = _discoveryService.searchDishes(query);
+
+      final responses = await Future.wait([resultsFuture, dishesFuture]);
 
       if (mounted) {
         setState(() {
-          _results = _filterOpenNow 
-              ? results.where((r) => r.isOpenNow).toList()
-              : results;
+          _results = responses[0] as List<RestaurantWithScore>;
+          _dishResults = responses[1] as List<Dish>;
           _isLoading = false;
         });
       }
@@ -84,164 +117,210 @@ class _SearchPageState extends State<SearchPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: TextField(
-          controller: _searchController,
-          focusNode: _searchFocus,
-          onChanged: (value) => _performSearch(),
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-          decoration: InputDecoration(
-            hintText: 'Search restaurants or dishes...',
-            hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-            border: InputBorder.none,
+        title: Container(
+          height: 45,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: Colors.white12),
           ),
-        ),
-        actions: [
-          if (_searchController.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white54),
-              onPressed: () {
-                _searchController.clear();
-                _performSearch();
-              },
+          child: TextField(
+            controller: _searchController,
+            focusNode: _searchFocus,
+            onChanged: (value) => _performSearch(),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Search for dishes or places...',
+              hintStyle: TextStyle(color: Colors.white30, fontSize: 14),
+              prefixIcon: const Icon(Icons.search, color: Colors.white30, size: 20),
+              suffixIcon: _searchController.text.isNotEmpty 
+                  ? IconButton(
+                      icon: const Icon(Icons.cancel, color: Colors.white30, size: 20),
+                      onPressed: () {
+                        _searchController.clear();
+                        _performSearch();
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
             ),
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: const Color(0xFFD70F64),
+              indicatorWeight: 3,
+              labelColor: const Color(0xFFD70F64),
+              unselectedLabelColor: Colors.white38,
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              tabs: const [
+                Tab(text: 'Restaurants'),
+                Tab(text: 'Menu items'),
+              ],
+            ),
+          ),
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRestaurantResults(),
+                _buildDishResults(),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildRestaurantResults() {
+    if (_searchController.text.isEmpty) return _buildInitialView();
+    if (_results.isEmpty) return _buildNoResultsView();
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: _results.length,
+      itemBuilder: (context, index) => _buildRestaurantCard(_results[index]),
+    );
+  }
+
+  Widget _buildDishResults() {
+    if (_searchController.text.isEmpty) return _buildInitialView();
+    if (_dishResults.isEmpty) return _buildNoResultsView();
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: _dishResults.length,
+      itemBuilder: (context, index) => _buildDishCard(_dishResults[index]),
+    );
+  }
+
+  Widget _buildInitialView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search, size: 80, color: Colors.white.withOpacity(0.05)),
+          const SizedBox(height: 16),
+          Text('Search for your favorite spots', style: TextStyle(color: Colors.white.withOpacity(0.2))),
         ],
       ),
-      body: Column(
+    );
+  }
+
+  Widget _buildNoResultsView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildFilterBar(),
-          const Divider(color: Colors.white10, height: 1),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
-                : _buildResultsList(),
+          Container(
+            padding: const EdgeInsets.all(30),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.search_off_rounded, size: 100, color: Colors.white.withOpacity(0.05)),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'No results found',
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'We couldn\'t find any restaurants or dishes matching "${_searchController.text}"',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterBar() {
-    return Container(
-      height: 60,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        children: [
-          _buildFilterChip('Best Rated', SortOption.score),
-          const SizedBox(width: 8),
-          _buildFilterChip('Budget', SortOption.budget),
-          const SizedBox(width: 8),
-          _buildFilterChip('Near Me', SortOption.nearest),
-          const SizedBox(width: 8),
-          _buildFilterChip('Popular', SortOption.popular),
-          const SizedBox(width: 12),
-          VerticalDivider(color: Colors.white24, width: 1, indent: 4, endIndent: 4),
-          const SizedBox(width: 12),
-          _buildToggleChip('Open Now', _filterOpenNow, (val) {
-            setState(() => _filterOpenNow = val);
-            _performSearch();
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, SortOption option) {
-    final isSelected = _selectedSort == option;
+  Widget _buildDishCard(Dish dish) {
     return GestureDetector(
-      onTap: () {
-        setState(() => _selectedSort = option);
-        _performSearch();
-      },
+      onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-        alignment: Alignment.center,
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withOpacity(0.05),
+          color: Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.white12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white70,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleChip(String label, bool isSelected, Function(bool) onToggle) {
-    return GestureDetector(
-      onTap: () => onToggle(!isSelected),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD700).withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.white24),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
         child: Row(
           children: [
-            if (isSelected) 
-              const Padding(
-                padding: EdgeInsets.only(right: 6),
-                child: Icon(Icons.check, color: Color(0xFFFFD700), size: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                dish.imageUrl,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.fastfood, size: 30, color: Colors.white38)),
               ),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? const Color(0xFFFFD700) : Colors.white70,
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          dish.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${dish.restaurantName ?? ''} • ${dish.restaurantAddress ?? ''}',
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        dish.restaurantRating?.toStringAsFixed(1) ?? '4.0',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 12),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildResultsList() {
-    if (_searchController.text.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search, size: 64, color: Colors.white.withOpacity(0.1)),
-            const SizedBox(height: 16),
-            Text(
-              'Search for your favorite spots',
-              style: TextStyle(color: Colors.white.withOpacity(0.3)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_results.isEmpty) {
-      return Center(
-        child: Text('No results found', style: TextStyle(color: Colors.white.withOpacity(0.3))),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _results.length,
-      itemBuilder: (context, index) {
-        final item = _results[index];
-        final r = item.restaurant;
-        return _buildRestaurantCard(item);
-      },
     );
   }
 
@@ -253,8 +332,8 @@ class _SearchPageState extends State<SearchPage> {
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
         child: Row(
@@ -266,7 +345,7 @@ class _SearchPageState extends State<SearchPage> {
                 width: 80,
                 height: 80,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.restaurant, color: Colors.white24)),
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.restaurant, size: 30, color: Colors.white38)),
               ),
             ),
             const SizedBox(width: 16),
@@ -280,17 +359,17 @@ class _SearchPageState extends State<SearchPage> {
                       Expanded(
                         child: Text(
                           r.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      _buildRatingBadge(r.rating),
+                      Text(item.scoreLabel.toUpperCase(), style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${r.categoryDisplay} • ${r.address}',
+                    r.address,
                     style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -298,25 +377,19 @@ class _SearchPageState extends State<SearchPage> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text(item.priceDisplay, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
-                      const Spacer(),
+                      Text('৳' * r.priceTier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                      const SizedBox(width: 4),
+                      Text('• ${r.categoryDisplay}', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
                       if (item.distanceKm != null) ...[
-                        const Icon(Icons.near_me, color: Colors.white38, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${item.distanceKm!.toStringAsFixed(1)} km',
-                          style: const TextStyle(color: Colors.white38, fontSize: 11),
-                        ),
                         const SizedBox(width: 8),
+                        const Icon(Icons.near_me, color: Colors.white38, size: 10),
+                        const SizedBox(width: 4),
+                        Text('${item.distanceKm!.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white38, fontSize: 11)),
                       ],
-                      Text(
-                        item.isOpenNow ? 'OPEN' : 'CLOSED',
-                        style: TextStyle(
-                          color: item.isOpenNow ? Colors.green : Colors.red,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      const Spacer(),
+                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      Text(r.rating.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],
@@ -324,26 +397,6 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRatingBadge(double rating) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFD700).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
-          const SizedBox(width: 4),
-          Text(
-            rating.toStringAsFixed(1),
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-        ],
       ),
     );
   }

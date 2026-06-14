@@ -22,7 +22,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
   List<Restaurant> _restaurants = [];
   List<Map<String, dynamic>> _critics = [];
   bool _isLoading = true;
-  String _locationName = 'Nearby';
+  String _locationName = 'Global';
 
   @override
   void initState() {
@@ -35,27 +35,35 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final hasPermission = await _locationService.checkPermission();
-      if (hasPermission) {
-        final pos = await _locationService.getCurrentLocation();
-        _locationName = await _restaurantService.getNeighbourhoodName(pos.latitude, pos.longitude);
-      }
-
       if (_timeFilter != 'alltime') {
-        final res = await _top10Service.getTop10Restaurants(filter: _timeFilter);
-        final critics = await _top10Service.getTop10Critics(filter: _timeFilter);
+        try {
+          final hasPermission = await _locationService.checkPermission();
+          if (hasPermission) {
+            final pos = await _locationService.getCurrentLocation();
+            final name = await _restaurantService.getNeighbourhoodName(pos.latitude, pos.longitude);
+            if (mounted) setState(() => _locationName = name);
+          }
+        } catch (_) {
+          if (mounted) setState(() => _locationName = 'Global');
+        }
+        
+        final res = await _top10Service.getTopRestaurantsByPeriod(filter: _timeFilter);
+        final criticsData = await _top10Service.getTopCritics(filter: _timeFilter);
         if (mounted) {
           setState(() {
             _restaurants = res;
-            _critics = critics;
+            _critics = criticsData;
             _isLoading = false;
           });
         }
       } else {
-        final critics = await _top10Service.getTop10Critics(filter: 'alltime');
+        if (mounted) setState(() => _locationName = 'Global');
+        final res = await _top10Service.getAllTimeLeaderboard();
+        final criticsData = await _top10Service.getTopCritics(filter: 'alltime');
         if (mounted) {
           setState(() {
-            _critics = critics;
+            _restaurants = res;
+            _critics = criticsData;
             _isLoading = false;
           });
         }
@@ -70,9 +78,15 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
     setState(() {
       _timeFilter = filter;
       _isLoading = true;
-      _restaurants = []; // Reset list to show loading state
+      _restaurants = []; 
     });
     _fetchData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -137,23 +151,6 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
   }
 
   Widget _buildRestaurantTabContent() {
-    if (_timeFilter == 'alltime') {
-      return StreamBuilder<List<Restaurant>>(
-        stream: _top10Service.getTop10RestaurantsStream(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && _isLoading) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
-          }
-          final list = snapshot.data ?? [];
-          return RefreshIndicator(
-            onRefresh: _fetchData,
-            color: const Color(0xFFFFD700),
-            child: _buildRestaurantList(list),
-          );
-        },
-      );
-    }
-
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
     return RefreshIndicator(
       onRefresh: _fetchData,
@@ -163,23 +160,6 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
   }
 
   Widget _buildCriticTabContent() {
-    if (_timeFilter == 'alltime') {
-      return StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _top10Service.getTop10CriticsStream(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && _isLoading) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
-          }
-          final list = snapshot.data ?? _critics;
-          return RefreshIndicator(
-            onRefresh: _fetchData,
-            color: const Color(0xFFFFD700),
-            child: _buildCriticList(list),
-          );
-        },
-      );
-    }
-
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
     return RefreshIndicator(
       onRefresh: _fetchData,
@@ -211,7 +191,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
               name: r.name,
               location: r.address,
               score: r.rating.toStringAsFixed(1),
-              description: r.aiSummary ?? "Highly rated culinary experience...",
+              description: r.aiSummary ?? "Highly rated global culinary experience...",
               imageUrl: r.imageUrl,
               onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
             ),
@@ -270,7 +250,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withOpacity(0.05),
+          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(25),
           border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.white10),
         ),
@@ -338,7 +318,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
                             Expanded(child: Text(name, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
                               child: Text(score, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
                             ),
                           ],
@@ -373,9 +353,9 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
+          color: Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: Row(
           children: [
@@ -418,9 +398,9 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Row(
         children: [
@@ -433,6 +413,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
             radius: 25,
             backgroundColor: Colors.white10,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+            child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 25, color: Colors.white38) : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -453,9 +434,9 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFD700).withOpacity(0.1),
+              color: const Color(0xFFFFD700).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.3)),
+              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
             ),
             child: Text(tier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
           ),

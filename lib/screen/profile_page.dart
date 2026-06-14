@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/user_service.dart';
 import '../api/review_system.dart';
@@ -15,8 +16,10 @@ class _ProfilePageState extends State<ProfilePage> {
   final UserService _userService = UserService();
   final ReviewApi _reviewApi = ReviewApi();
   final TierUpgradeApi _tierUpgradeApi = TierUpgradeApi();
+  final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true;
+  bool _isUploadingPhoto = false;
   Map<String, dynamic>? _userData;
   Map<String, dynamic>? _tierInfo;
   List<Map<String, dynamic>> _reviews = [];
@@ -30,27 +33,16 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _fetchData() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
-
     if (mounted) setState(() => _isLoading = true);
-
     try {
-      // Fetch user profile
       final userResult = await _userService.getUserProfile(userId);
-
-      // Fetch tier info and reviews in parallel
       final results = await Future.wait([
         _tierUpgradeApi.getTierInfo(userId),
         _reviewApi.getUserReviews(userId),
       ]);
-
       if (mounted) {
         setState(() {
-          // ── user data ──
-          // getUserProfile returns UserResult with a 'data' map
-          // that includes: id, name, tier, verified, helpful_votes,
-          // profile_photo_url, bio, review_count
           _userData = userResult.isSuccess ? userResult.data : null;
-
           _tierInfo = results[0] as Map<String, dynamic>;
           _reviews  = results[1] as List<Map<String, dynamic>>;
           _isLoading = false;
@@ -66,19 +58,76 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _pickAndUploadPhoto() async {
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 800,
+        maxHeight: 800,
+      );
+      if (picked == null) return;
+
+      setState(() => _isUploadingPhoto = true);
+
+      final bytes = await picked.readAsBytes();
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final ext = picked.name.split('.').last.toLowerCase();
+
+      // bucket name matches your actual Supabase bucket 'profiile-photos'
+      // (note the typo — double i — to match what you created)
+      // To fix permanently: rename bucket in Supabase to 'profile-photos'
+      const bucketName = 'profiile-photos';
+      final filePath = 'avatars/$userId/avatar.$ext';
+
+      await Supabase.instance.client.storage
+          .from(bucketName)
+          .uploadBinary(
+        filePath,
+        bytes,
+        fileOptions: FileOptions(upsert: true, contentType: 'image/$ext'),
+      );
+
+      final publicUrl = Supabase.instance.client.storage
+          .from(bucketName)
+          .getPublicUrl(filePath);
+
+      await Supabase.instance.client
+          .from('users')
+          .update({'profile_photo_url': publicUrl})
+          .eq('id', userId);
+
+      if (mounted) {
+        setState(() {
+          _userData = {..._userData ?? {}, 'profile_photo_url': publicUrl};
+          _isUploadingPhoto = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile photo updated!'),
+            backgroundColor: Color(0xFFFFD700),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _showEditProfileDialog() async {
     if (_userData == null) return;
     final nameController = TextEditingController(text: _userData?['name'] ?? '');
     final bioController  = TextEditingController(text: _userData?['bio']  ?? '');
-
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text(
-          'Edit Profile',
-          style: TextStyle(color: Colors.white, fontFamily: 'serif'),
-        ),
+        title: const Text('Edit Profile', style: TextStyle(color: Colors.white, fontFamily: 'serif')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -88,10 +137,8 @@ class _ProfilePageState extends State<ProfilePage> {
               decoration: const InputDecoration(
                 labelText: 'Full Name',
                 labelStyle: TextStyle(color: Colors.white70),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFFFFD700))),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFFFFD700))),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
               ),
             ),
             const SizedBox(height: 16),
@@ -102,54 +149,36 @@ class _ProfilePageState extends State<ProfilePage> {
               decoration: const InputDecoration(
                 labelText: 'Bio',
                 labelStyle: TextStyle(color: Colors.white70),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFFFFD700))),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFFFFD700))),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFD700))),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () async {
               final newName = nameController.text.trim();
               final newBio  = bioController.text.trim();
               Navigator.pop(context);
               setState(() => _isLoading = true);
-
               final result = await _userService.updateProfile(
                 name: newName.isNotEmpty ? newName : null,
                 bio:  newBio.isNotEmpty  ? newBio  : null,
               );
-
               if (result.isSuccess) {
                 await _fetchData();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Profile updated successfully!')),
-                  );
-                }
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated!')));
               } else {
                 if (mounted) {
                   setState(() => _isLoading = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(result.message)),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message)));
                 }
               }
             },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD700)),
-            child: const Text('Save',
-                style: TextStyle(
-                    color: Colors.black, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)),
+            child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -159,84 +188,43 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0D0D0D),
-        body: Center(
-            child: CircularProgressIndicator(color: Color(0xFFFFD700))),
-      );
+      return const Scaffold(backgroundColor: Color(0xFF0D0D0D), body: Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))));
     }
-
     if (_userData == null) {
       return Scaffold(
         backgroundColor: const Color(0xFF0D0D0D),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Failed to load profile',
-                  style: TextStyle(color: Colors.white)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _fetchData,
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFD700)),
-                child: const Text('Retry',
-                    style: TextStyle(color: Colors.black)),
-              ),
-            ],
-          ),
-        ),
+        body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Text('Failed to load profile', style: TextStyle(color: Colors.white)),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: _fetchData, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)), child: const Text('Retry', style: TextStyle(color: Colors.black))),
+        ])),
       );
     }
 
-    // ── Pull data from Supabase response ──
     final String  name            = _userData?['name']              ?? 'Anonymous';
     final String? profilePhotoUrl = _userData?['profile_photo_url'];
     final String? bio             = _userData?['bio'];
     final bool    verified        = _userData?['verified']          ?? false;
-    final String? idType          = _userData?['id_type'];          // 'nid' or 'student_id'
+    final String? idType          = _userData?['id_type'];
     final int     reviewCount     = _userData?['review_count']      ?? _reviews.length;
-
-    // ── Tier info ──
-    final String tier         = (_tierInfo?['current_tier'] as String? ?? 'explorer').toUpperCase();
-    final int    helpfulVotes = _tierInfo?['helpful_votes'] ?? 0;
-    final int    votesNeeded  = _tierInfo?['votes_needed']  ?? 0;
-    final int    threshold    = _tierInfo?['threshold']     ?? 50;
-    final String nextTier = (_tierInfo?['next_tier'] as String? ?? 'none')
-        .replaceAll('_', ' ');
-
-    // Progress within current tier range
-    final tierStarts = {
-      'explorer': 0,
-      'expert':   50,
-      'diamond':  200,
-      'platinum': 500,
-    };
-    final String currentTierKey = (_tierInfo?['current_tier'] as String? ?? 'explorer');
-    final int tierStart    = tierStarts[currentTierKey] ?? 0;
-    final double progress = currentTierKey == 'platinum'
-        ? 1.0
-        : (threshold - tierStart) > 0
-        ? ((helpfulVotes - tierStart) / (threshold - tierStart)).clamp(0.0, 1.0)
-        : 0.0;
-
-    // Verified badge label
-    final String verifiedLabel = idType == 'student_id'
-        ? 'Verified • Student ID'
-        : 'Verified • NID';
+    final String  tier            = (_tierInfo?['current_tier'] as String? ?? 'explorer').toUpperCase();
+    final int     helpfulVotes    = _tierInfo?['helpful_votes'] ?? 0;
+    final int     votesNeeded     = _tierInfo?['votes_needed']  ?? 0;
+    final int     threshold       = _tierInfo?['threshold']     ?? 50;
+    final String  nextTier        = (_tierInfo?['next_tier'] as String? ?? 'none').replaceAll('_', ' ');
+    final tierStarts = {'explorer': 0, 'expert': 50, 'diamond': 200, 'platinum': 500};
+    final String currentTierKey   = (_tierInfo?['current_tier'] as String? ?? 'explorer');
+    final int    tierStart        = tierStarts[currentTierKey] ?? 0;
+    final double progress = currentTierKey == 'platinum' ? 1.0
+        : (threshold - tierStart) > 0 ? ((helpfulVotes - tierStart) / (threshold - tierStart)).clamp(0.0, 1.0) : 0.0;
+    final String verifiedLabel = idType == 'student_id' ? 'Verified • Student ID' : 'Verified • NID';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text('LocalLens',
-            style: TextStyle(
-                color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent, elevation: 0,
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        title: const Text('LocalLens', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
@@ -266,34 +254,28 @@ class _ProfilePageState extends State<ProfilePage> {
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(
-                            color: const Color(0xFFFFD700), width: 2),
+                        border: Border.all(color: const Color(0xFFFFD700), width: 2),
                       ),
-                      child: CircleAvatar(
+                      child: _isUploadingPhoto
+                          ? const SizedBox(
+                        width: 100, height: 100,
+                        child: CircularProgressIndicator(color: Color(0xFFFFD700), strokeWidth: 3),
+                      )
+                          : CircleAvatar(
                         radius: 50,
-                        backgroundColor:
-                        Colors.white.withValues(alpha: 0.1),
-                        backgroundImage: (profilePhotoUrl != null &&
-                            profilePhotoUrl.isNotEmpty)
-                            ? NetworkImage(profilePhotoUrl)
-                            : null,
-                        child: (profilePhotoUrl == null ||
-                            profilePhotoUrl.isEmpty)
-                            ? const Icon(Icons.person,
-                            size: 50, color: Colors.white54)
-                            : null,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        backgroundImage: (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty)
+                            ? NetworkImage(profilePhotoUrl) : null,
+                        child: (profilePhotoUrl == null || profilePhotoUrl.isEmpty)
+                            ? const Icon(Icons.person, size: 50, color: Colors.white54) : null,
                       ),
                     ),
                     GestureDetector(
-                      onTap: _showEditProfileDialog,
+                      onTap: _isUploadingPhoto ? null : _pickAndUploadPhoto,
                       child: Container(
                         padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFFD700),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.edit,
-                            color: Colors.black, size: 16),
+                        decoration: const BoxDecoration(color: Color(0xFFFFD700), shape: BoxShape.circle),
+                        child: const Icon(Icons.camera_alt, color: Colors.black, size: 16),
                       ),
                     ),
                   ],
@@ -301,106 +283,53 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const SizedBox(height: 16),
 
-              // ── Name ──────────────────────────────
-              Text(
-                name,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'serif'),
-              ),
-
-              // ── Bio ───────────────────────────────
+              Text(name, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'serif')),
               if (bio != null && bio.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(
-                  bio,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 13, height: 1.4),
-                ),
+                Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 13, height: 1.4)),
               ],
-
               const SizedBox(height: 10),
 
-              // ── Badges ────────────────────────────
               Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                alignment: WrapAlignment.center,
+                spacing: 8, runSpacing: 6, alignment: WrapAlignment.center,
                 children: [
                   _buildBadge(tier, _getTierColor(tier)),
-                  if (verified)
-                    _buildBadge(verifiedLabel, Colors.green),
+                  if (verified) _buildBadge(verifiedLabel, Colors.green),
                 ],
               ),
-
               const SizedBox(height: 24),
 
-              // ── Stats ─────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildStatItem(reviewCount.toString(), 'Reviews'),
                   _buildStatItem(helpfulVotes.toString(), 'Helpful'),
-                  // Points = helpful_votes × tier multiplier
-                  _buildStatItem(
-                    _calcPoints(helpfulVotes, tier).toString(),
-                    'Points',
-                  ),
+                  _buildStatItem(_calcPoints(helpfulVotes, tier).toString(), 'Points'),
                 ],
               ),
-
               const SizedBox(height: 32),
 
-              // ── Account Settings ──────────────────
               _buildSectionHeader('Account Settings'),
               const SizedBox(height: 16),
 
-              _buildSettingsItem(
-                Icons.verified_user_outlined,
-                'Verification',
-                subtitle: verified ? 'Verified' : 'Not verified',
-                onTap: () => Navigator.pushNamed(context, '/verification'),
-                trailing: verified
-                    ? _buildVerifiedBadge()
-                    : const Icon(Icons.chevron_right,
-                    color: Colors.white38),
-              ),
+              _buildSettingsItem(Icons.verified_user_outlined, 'Verification',
+                  subtitle: verified ? 'Verified' : 'Not verified',
+                  onTap: () => Navigator.pushNamed(context, '/verification'),
+                  trailing: verified ? _buildVerifiedBadge() : const Icon(Icons.chevron_right, color: Colors.white38)),
 
-              _buildSettingsItem(
-                Icons.person_outline,
-                'Personal Information',
-                subtitle: 'Edit name and bio',
-                onTap: _showEditProfileDialog,
-              ),
+              _buildSettingsItem(Icons.person_outline, 'Personal Information',
+                  subtitle: 'Edit name and bio', onTap: _showEditProfileDialog),
 
-              _buildSettingsItem(
-                Icons.payment_outlined,
-                'Payment Methods',
-                subtitle: 'Coming soon',
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Payment methods coming soon.')),
-                ),
-              ),
+              _buildSettingsItem(Icons.photo_camera_outlined, 'Change Profile Photo',
+                  subtitle: 'Upload from gallery', onTap: _pickAndUploadPhoto),
 
               const SizedBox(height: 32),
 
-              // ── Recent Reviews ────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _buildSectionHeader('Recent Reviews'),
-                  TextButton(
-                    onPressed: () {
-                      // TODO: navigate to full reviews list
-                    },
-                    child: const Text('View All',
-                        style: TextStyle(
-                            color: Color(0xFFFFD700), fontSize: 12)),
-                  ),
+                  TextButton(onPressed: () {}, child: const Text('View All', style: TextStyle(color: Color(0xFFFFD700), fontSize: 12))),
                 ],
               ),
               const SizedBox(height: 16),
@@ -408,20 +337,13 @@ class _ProfilePageState extends State<ProfilePage> {
               if (_reviews.isEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Column(
-                    children: [
-                      Icon(Icons.rate_review_outlined,
-                          color: Colors.white24, size: 48),
-                      const SizedBox(height: 12),
-                      const Text('No reviews yet',
-                          style: TextStyle(
-                              color: Colors.white54, fontSize: 14)),
-                      const SizedBox(height: 4),
-                      const Text('Your reviews will appear here',
-                          style: TextStyle(
-                              color: Colors.white24, fontSize: 12)),
-                    ],
-                  ),
+                  child: const Column(children: [
+                    Icon(Icons.rate_review_outlined, color: Colors.white24, size: 48),
+                    SizedBox(height: 12),
+                    Text('No reviews yet', style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    SizedBox(height: 4),
+                    Text('Your reviews will appear here', style: TextStyle(color: Colors.white24, fontSize: 12)),
+                  ]),
                 )
               else
                 ..._reviews.take(3).map((review) => Padding(
@@ -431,7 +353,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SizedBox(height: 24),
 
-              // ── Next Milestone ────────────────────
               if (nextTier != 'none')
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -446,14 +367,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Next Milestone',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 12)),
+                          const Text('Next Milestone', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           Text('$helpfulVotes / $threshold Votes',
-                              style: const TextStyle(
-                                  color: Color(0xFFFFD700),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold)),
+                              style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -462,26 +378,17 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: LinearProgressIndicator(
                           value: progress,
                           backgroundColor: Colors.white10,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                              Color(0xFFFFD700)),
+                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
                           minHeight: 8,
                         ),
                       ),
                       const SizedBox(height: 12),
                       RichText(
                         text: TextSpan(
-                          style: const TextStyle(
-                              color: Colors.white60, fontSize: 12),
+                          style: const TextStyle(color: Colors.white60, fontSize: 12),
                           children: [
-                            TextSpan(
-                                text:
-                                'Get $votesNeeded more helpful votes to unlock '),
-                            TextSpan(
-                              text: nextTier,
-                              style: const TextStyle(
-                                  color: Color(0xFFFFD700),
-                                  fontWeight: FontWeight.bold),
-                            ),
+                            TextSpan(text: 'Get $votesNeeded more helpful votes to unlock '),
+                            TextSpan(text: nextTier, style: const TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
                             const TextSpan(text: ' status.'),
                           ],
                         ),
@@ -498,14 +405,8 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ── Points calc: helpful_votes × tier multiplier ──
   int _calcPoints(int helpfulVotes, String tier) {
-    final multipliers = {
-      'PLATINUM': 4,
-      'DIAMOND':  3,
-      'EXPERT':   2,
-      'EXPLORER': 1,
-    };
+    final multipliers = {'PLATINUM': 4, 'DIAMOND': 3, 'EXPERT': 2, 'EXPLORER': 1};
     return helpfulVotes * (multipliers[tier] ?? 1);
   }
 
@@ -522,85 +423,44 @@ class _ProfilePageState extends State<ProfilePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
+        color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-            color: color, fontSize: 10, fontWeight: FontWeight.bold),
-      ),
+      child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
   Widget _buildStatItem(String value, String label) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 12)),
-      ],
-    );
+    return Column(children: [
+      Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+    ]);
   }
 
   Widget _buildSectionHeader(String title) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: Text(
-        title,
-        style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'serif'),
-      ),
+      child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif')),
     );
   }
 
-  Widget _buildSettingsItem(
-      IconData icon,
-      String title, {
-        String? subtitle,
-        VoidCallback? onTap,
-        Widget? trailing,
-      }) {
+  Widget _buildSettingsItem(IconData icon, String title, {String? subtitle, VoidCallback? onTap, Widget? trailing}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white70, size: 20),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 15)),
-                  if (subtitle != null)
-                    Text(subtitle,
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11)),
-                ],
-              ),
-            ),
-            trailing ??
-                const Icon(Icons.chevron_right, color: Colors.white38),
-          ],
-        ),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          Icon(icon, color: Colors.white70, size: 20),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(color: Colors.white, fontSize: 15)),
+            if (subtitle != null) Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          ])),
+          trailing ?? const Icon(Icons.chevron_right, color: Colors.white38),
+        ]),
       ),
     );
   }
@@ -609,157 +469,75 @@ class _ProfilePageState extends State<ProfilePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle, color: Colors.green, size: 12),
-          SizedBox(width: 4),
-          Text('VERIFIED',
-              style: TextStyle(
-                  color: Colors.green,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold)),
-        ],
-      ),
+      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.check_circle, color: Colors.green, size: 12),
+        SizedBox(width: 4),
+        Text('VERIFIED', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+      ]),
     );
   }
 
-  // ── Review card ───────────────────────────────
   Widget _buildRecentReview(Map<String, dynamic> review) {
-    final restaurant = review['restaurants'] as Map<String, dynamic>? ?? {};
-    final String restaurantName = restaurant['name'] ?? 'Unknown Restaurant';
-    final String body           = review['body']    ?? '';
-    final double rating         = (review['rating'] as num?)?.toDouble() ?? 0.0;
-    final int    helpfulVotes   = review['helpful_votes'] ?? 0;
-    final String moodTag        = review['mood_tag'] ?? 'good';
-
-    // Get first review photo if exists
-    final reviewPhotos = (review['photos'] as List<dynamic>?) ?? [];
-    final String? photoUrl =
-    reviewPhotos.isNotEmpty ? reviewPhotos[0].toString() : null;
-
-    // Get first restaurant photo as fallback
-    final restPhotos =
-        (restaurant['photos'] as List<dynamic>?) ?? [];
-    final String? restPhotoUrl =
-    restPhotos.isNotEmpty ? restPhotos[0].toString() : null;
-
-    // Mood emoji
-    final moodEmoji = moodTag == 'loved_it'
-        ? '😍'
-        : moodTag == 'good'
-        ? '😊'
-        : '😐';
-
-    // Time ago
-    final createdAt =
-        DateTime.tryParse(review['created_at'] ?? '') ?? DateTime.now();
-    final diff = DateTime.now().difference(createdAt);
-    final timeAgo = diff.inDays > 30
-        ? '${(diff.inDays / 30).floor()}mo ago'
-        : diff.inDays > 0
-        ? '${diff.inDays}d ago'
-        : diff.inHours > 0
-        ? '${diff.inHours}h ago'
-        : 'Just now';
+    final restaurant     = review['restaurants'] as Map<String, dynamic>? ?? {};
+    final restaurantName = restaurant['name'] ?? 'Unknown Restaurant';
+    final body           = review['body']    ?? '';
+    final rating         = (review['rating'] as num?)?.toDouble() ?? 0.0;
+    final helpfulVotes   = review['helpful_votes'] ?? 0;
+    final moodTag        = review['mood_tag'] ?? 'good';
+    final reviewPhotos   = (review['photos'] as List<dynamic>?) ?? [];
+    final restPhotos     = (restaurant['photos'] as List<dynamic>?) ?? [];
+    final photoUrl       = reviewPhotos.isNotEmpty ? reviewPhotos[0].toString() : null;
+    final restPhotoUrl   = restPhotos.isNotEmpty ? restPhotos[0].toString() : null;
+    final moodEmoji      = moodTag == 'loved_it' ? '😍' : moodTag == 'good' ? '😊' : '😐';
+    final createdAt      = DateTime.tryParse(review['created_at'] ?? '') ?? DateTime.now();
+    final diff           = DateTime.now().difference(createdAt);
+    final timeAgo        = diff.inDays > 30 ? '${(diff.inDays / 30).floor()}mo ago'
+        : diff.inDays > 0 ? '${diff.inDays}d ago' : diff.inHours > 0 ? '${diff.inHours}h ago' : 'Just now';
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withValues(alpha: 0.03), borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Restaurant name + rating + time
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  restaurantName,
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(restaurantName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+          Text(moodEmoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 6),
+          const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+          const SizedBox(width: 3),
+          Text(rating.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 8),
+          Text(timeAgo, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+        ]),
+        const SizedBox(height: 10),
+        Text(body, style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 13), maxLines: 3, overflow: TextOverflow.ellipsis),
+        if (photoUrl != null || restPhotoUrl != null || helpfulVotes > 0) ...[
+          const SizedBox(height: 12),
+          Row(children: [
+            if (photoUrl != null || restPhotoUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(photoUrl ?? restPhotoUrl!, width: 56, height: 56, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(width: 56, height: 56,
+                      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                      child: const Icon(Icons.image_not_supported, color: Colors.white24, size: 20)),
                 ),
               ),
-              Text(moodEmoji,
-                  style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 6),
-              const Icon(Icons.star,
-                  color: Color(0xFFFFD700), size: 14),
-              const SizedBox(width: 3),
-              Text(rating.toStringAsFixed(1),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              Text(timeAgo,
-                  style: const TextStyle(
-                      color: Colors.white38, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Review body
-          Text(
-            body,
-            style: const TextStyle(
-                color: Colors.white70, height: 1.5, fontSize: 13),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-
-          // Photo + helpful votes row
-          if (photoUrl != null || restPhotoUrl != null || helpfulVotes > 0) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                // Photo thumbnail
-                if (photoUrl != null || restPhotoUrl != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      photoUrl ?? restPhotoUrl!,
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: Colors.white10,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.image_not_supported,
-                            color: Colors.white24, size: 20),
-                      ),
-                    ),
-                  ),
-                const Spacer(),
-                // Helpful votes
-                if (helpfulVotes > 0)
-                  Row(
-                    children: [
-                      const Icon(Icons.thumb_up_outlined,
-                          color: Colors.white38, size: 13),
-                      const SizedBox(width: 4),
-                      Text('$helpfulVotes helpful',
-                          style: const TextStyle(
-                              color: Colors.white38, fontSize: 11)),
-                    ],
-                  ),
-              ],
-            ),
-          ],
+            const Spacer(),
+            if (helpfulVotes > 0)
+              Row(children: [
+                const Icon(Icons.thumb_up_outlined, color: Colors.white38, size: 13),
+                const SizedBox(width: 4),
+                Text('$helpfulVotes helpful', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              ]),
+          ]),
         ],
-      ),
+      ]),
     );
   }
 }
