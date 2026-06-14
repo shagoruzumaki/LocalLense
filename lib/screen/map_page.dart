@@ -27,7 +27,7 @@ class _MapPageState extends State<MapPage> {
   StreamSubscription<LatLng>? _locationSubscription;
 
   List<RestaurantWithScore> _spots = [];
-  LatLng _userLocation = const LatLng(23.8103, 90.4125); 
+  LatLng _userLocation = const LatLng(0, 0); // Start at 0,0 to detect if we haven't found user yet
   List<LatLng> _routePoints = [];
   
   Restaurant? _currentTarget;
@@ -36,6 +36,7 @@ class _MapPageState extends State<MapPage> {
   
   bool _isLoading = true;
   bool _isFollowingUser = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -47,62 +48,91 @@ class _MapPageState extends State<MapPage> {
   Future<void> _initMap() async {
     try {
       final permissionOk = await _locationService.checkPermission();
-      final serviceOk = await _locationService.isServiceEnabled();
-
-      if (!permissionOk || !serviceOk) {
-        throw Exception("Location services disabled or permission denied");
-      }
-
-      final initialPos = await _locationService.getCurrentLocation();
-      
-      if (mounted) {
+      if (!permissionOk) {
         setState(() {
-          _userLocation = initialPos;
+          _errorMessage = "Location permissions are required to use the map.";
           _isLoading = false;
         });
-
-        if (_currentTarget != null) {
-          _isFollowingUser = false;
-          await _getRoute(); 
-          _fitBounds();
-        } else {
-          _mapController.move(_userLocation, 15.0);
-        }
+        return;
       }
 
-      _locationSubscription = _locationService.getLocationStream().listen((newLocation) {
-        if (!mounted) return;
-        
-        double distMoved = LocationUtils.calculateDistance(
-          _userLocation.latitude, _userLocation.longitude,
-          newLocation.latitude, newLocation.longitude
-        );
-
+      final serviceOk = await _locationService.isServiceEnabled();
+      if (!serviceOk) {
         setState(() {
-          _userLocation = newLocation;
-          if (_isFollowingUser) {
-            _mapController.move(_userLocation, _mapController.camera.zoom);
-          }
+          _errorMessage = "Please enable GPS/Location services.";
+          _isLoading = false;
         });
-        
-        // Recalculate road route if user moved > 20 meters
-        if (_currentTarget != null && distMoved > 0.02) { 
-           _getRoute(); 
+        return;
+      }
+
+      // Try to get current location
+      try {
+        final initialPos = await _locationService.getCurrentLocation();
+        if (mounted) {
+          setState(() {
+            _userLocation = initialPos;
+            _isLoading = false;
+          });
+
+          if (_currentTarget != null) {
+            _isFollowingUser = false;
+            await _getRoute(); 
+            _fitBounds();
+          } else {
+            _mapController.move(_userLocation, 15.0);
+          }
         }
-      });
+      } catch (e) {
+        debugPrint("Initial location fetch failed: $e");
+        // Don't stop here, the stream might still provide location
+      }
+
+      _locationSubscription = _locationService.getLocationStream().listen(
+        (newLocation) {
+          if (!mounted) return;
+          
+          bool wasZero = _userLocation.latitude == 0 && _userLocation.longitude == 0;
+
+          double distMoved = wasZero ? 0 : LocationUtils.calculateDistance(
+            _userLocation.latitude, _userLocation.longitude,
+            newLocation.latitude, newLocation.longitude
+          );
+
+          setState(() {
+            _userLocation = newLocation;
+            _isLoading = false; // Successfully got a location
+            if (_isFollowingUser || wasZero) {
+              _mapController.move(_userLocation, _mapController.camera.zoom < 5 ? 15.0 : _mapController.camera.zoom);
+            }
+          });
+          
+          if (_currentTarget != null && (distMoved > 0.02 || wasZero)) { 
+             _getRoute(); 
+          }
+        },
+        onError: (e) {
+          debugPrint("Location Stream Error: $e");
+          if (mounted && _userLocation.latitude == 0) {
+            setState(() => _errorMessage = "Could not get your location. Please check your GPS settings.");
+          }
+        }
+      );
 
       await _fetchSpots();
     } catch (e) {
-      debugPrint("Location Error: $e");
+      debugPrint("General Map Error: $e");
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _errorMessage = "Something went wrong initializing the map.";
+          _isLoading = false;
+        });
         _fetchSpots();
       }
     }
   }
 
   Future<void> _getRoute() async {
-    if (_currentTarget == null) return;
+    if (_currentTarget == null || (_userLocation.latitude == 0 && _userLocation.longitude == 0)) return;
 
     try {
       final target = LatLng(_currentTarget!.latitude, _currentTarget!.longitude);
@@ -138,7 +168,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _fitBounds() {
-    if (_currentTarget == null) return;
+    if (_currentTarget == null || (_userLocation.latitude == 0 && _userLocation.longitude == 0)) return;
     
     final target = LatLng(_currentTarget!.latitude, _currentTarget!.longitude);
     final bounds = LatLngBounds.fromPoints([_userLocation, target]);
@@ -152,6 +182,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _fetchSpots() async {
+    if (_userLocation.latitude == 0) return;
     try {
       final spots = await _discoveryService.getNearby(
         lat: _userLocation.latitude,
@@ -214,7 +245,7 @@ class _MapPageState extends State<MapPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _userLocation,
+              initialCenter: _userLocation.latitude == 0 ? const LatLng(23.8103, 90.4125) : _userLocation,
               initialZoom: 15,
               onPositionChanged: (position, hasGesture) {
                 if (hasGesture && _isFollowingUser) {
@@ -226,6 +257,7 @@ class _MapPageState extends State<MapPage> {
               TileLayer(
                 urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: const ['a', 'b', 'c'],
+                userAgentPackageName: 'com.example.local_lense',
                 tileBuilder: (context, tileWidget, tile) => ColorFiltered(
                   colorFilter: const ColorFilter.matrix([
                     -1.0, 0.0, 0.0, 0.0, 255.0,
@@ -251,40 +283,41 @@ class _MapPageState extends State<MapPage> {
               MarkerLayer(
                 markers: [
                   // LIVE USER DOT
-                  Marker(
-                    point: _userLocation,
-                    width: 40,
-                    height: 40,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
+                  if (_userLocation.latitude != 0)
+                    Marker(
+                      point: _userLocation,
+                      width: 40,
+                      height: 40,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        Container(
-                          width: 14,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blue.withValues(alpha: 0.5),
-                                blurRadius: 8,
-                                spreadRadius: 2,
-                              )
-                            ],
+                          Container(
+                            width: 14,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blue.withValues(alpha: 0.5),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                )
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                   // DESTINATION
                   if (_currentTarget != null)
                     Marker(
@@ -302,7 +335,7 @@ class _MapPageState extends State<MapPage> {
                       onTap: () => _showRestaurantPopup(item),
                       child: Icon(
                         Icons.location_on, 
-                        color: item.isOpenNow ? const Color(0xFFFFD700) : Colors.white24, 
+                        color: const Color(0xFFFFD700), // Changed to solid yellow for all markers
                         size: 38
                       ),
                     ),
@@ -313,7 +346,56 @@ class _MapPageState extends State<MapPage> {
           ),
           
           if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+            Container(
+              color: Colors.black87,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFFFFD700)),
+                    SizedBox(height: 16),
+                    Text("Fetching your location...", style: TextStyle(color: Colors.white70)),
+                  ],
+                ),
+              ),
+            ),
+          
+          if (_errorMessage != null)
+             Center(
+               child: Container(
+                 margin: const EdgeInsets.all(24),
+                 padding: const EdgeInsets.all(20),
+                 decoration: BoxDecoration(
+                   color: const Color(0xFF1A1A1A),
+                   borderRadius: BorderRadius.circular(16),
+                   border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                 ),
+                 child: Column(
+                   mainAxisSize: MainAxisSize.min,
+                   children: [
+                     const Icon(Icons.location_off, color: Colors.redAccent, size: 48),
+                     const SizedBox(height: 16),
+                     Text(
+                       _errorMessage!,
+                       textAlign: TextAlign.center,
+                       style: const TextStyle(color: Colors.white, fontSize: 16),
+                     ),
+                     const SizedBox(height: 24),
+                     ElevatedButton(
+                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)),
+                       onPressed: () {
+                         setState(() {
+                           _errorMessage = null;
+                           _isLoading = true;
+                         });
+                         _initMap();
+                       },
+                       child: const Text("Retry", style: TextStyle(color: Colors.black)),
+                     ),
+                   ],
+                 ),
+               ),
+             ),
           
           // DIRECTION INFO CARD
           if (_currentTarget != null)
@@ -413,8 +495,10 @@ class _MapPageState extends State<MapPage> {
             shape: const CircleBorder(),
             child: Icon(_isFollowingUser ? Icons.gps_fixed : Icons.my_location),
             onPressed: () {
-              setState(() => _isFollowingUser = true);
-              _mapController.move(_userLocation, 15.0);
+              if (_userLocation.latitude != 0) {
+                setState(() => _isFollowingUser = true);
+                _mapController.move(_userLocation, 15.0);
+              }
             },
           ),
         ],
