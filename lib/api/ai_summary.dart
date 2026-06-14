@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../utils/app_constants.dart'; // Updated import
+import '../constant.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -13,10 +13,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AiSummaryApi {
   final SupabaseClient _supabase = Supabase.instance.client;
+  static const int _minimumReviewCount = 7;
+  static const int _refreshEveryReviewCount = 10;
 
-  // Gemini 1.5 Flash endpoint
+  // Gemini Flash endpoint
   static const String _geminiEndpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
 
   // API key loaded from AppConstants
   String get _geminiApiKey => AppConstants.geminiApiKey;
@@ -24,23 +26,22 @@ class AiSummaryApi {
   // ─────────────────────────────────────────────
   // MAIN: Check if summary should be generated
   // Called from review_api.dart after every submitReview()
-  // Triggers at 5 reviews (first time) and every 10 after
+  // Triggers at 7 reviews (first time) and every 10 after
   // ─────────────────────────────────────────────
   Future<void> checkAndGenerateSummary(String restaurantId) async {
-    // Count total reviews for this restaurant
-    final countResponse = await _supabase
-        .from('reviews')
-        .select('id')
-        .eq('restaurant_id', restaurantId)
-        .eq('flagged', false);
+    final reviewCount = await _countUsableReviews(restaurantId);
+    if (reviewCount < _minimumReviewCount) return;
 
-    final reviewCount = (countResponse as List<dynamic>).length;
+    final existingSummary = await _fetchSavedSummary(restaurantId);
+    final hasSummary =
+        (existingSummary['ai_summary'] as String?)?.trim().isNotEmpty ?? false;
 
-    // Trigger logic:
-    // First time: exactly 5 reviews
-    // After that: every 10 new reviews (15, 25, 35, 45...)
     final bool shouldGenerate =
-        reviewCount == 5 || (reviewCount > 5 && (reviewCount - 5) % 10 == 0);
+        !hasSummary ||
+        reviewCount == _minimumReviewCount ||
+        (reviewCount > _minimumReviewCount &&
+            (reviewCount - _minimumReviewCount) % _refreshEveryReviewCount ==
+                0);
 
     if (shouldGenerate) {
       await generateAndSaveSummary(restaurantId);
@@ -56,12 +57,12 @@ class AiSummaryApi {
     // Step 1: Fetch latest 50 non-flagged review bodies
     final reviews = await _fetchLatestReviews(restaurantId);
 
-    // Need at least 5 reviews to generate a meaningful summary
-    if (reviews.length < 5) {
+    // Need enough reviews to generate a meaningful summary
+    if (reviews.length < _minimumReviewCount) {
       return; // Do nothing — frontend shows null
     }
 
-    // Step 2: Call Gemini 1.5 Flash
+    // Step 2: Call Gemini Flash
     final geminiResponse = await _callGemini(reviews);
 
     if (geminiResponse == null) {
@@ -102,7 +103,7 @@ class AiSummaryApi {
   }
 
   // ─────────────────────────────────────────────
-  // STEP 2: Call Gemini 1.5 Flash API
+  // STEP 2: Call Gemini Flash API
   // ─────────────────────────────────────────────
   Future<String?> _callGemini(List<String> reviewBodies) async {
     if (_geminiApiKey.isEmpty || _geminiApiKey == 'YOUR_GEMINI_API_KEY') {
@@ -117,7 +118,8 @@ class AiSummaryApi {
         .map((e) => 'Review ${e.key + 1}: ${e.value}')
         .join('\n');
 
-    final prompt = '''
+    final prompt =
+        '''
 You are summarising customer reviews for a restaurant discovery app.
 
 Here are the reviews:
@@ -138,20 +140,23 @@ TAGS: [tag1, tag2, tag3]
       'contents': [
         {
           'parts': [
-            {'text': prompt}
-          ]
-        }
+            {'text': prompt},
+          ],
+        },
       ],
       'generationConfig': {
         'temperature': 0.3, // low temp = consistent, factual output
         'maxOutputTokens': 200,
-      }
+      },
     };
 
     try {
       final response = await http.post(
-        Uri.parse('$_geminiEndpoint?key=$_geminiApiKey'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse(_geminiEndpoint),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': _geminiApiKey,
+        },
         body: jsonEncode(requestBody),
       );
 
@@ -163,7 +168,9 @@ TAGS: [tag1, tag2, tag3]
         // Rate limit hit — Gemini free tier allows 15 requests/min
         throw Exception('Gemini rate limit reached. Try again in a minute.');
       } else {
-        throw Exception('Gemini API error: ${response.statusCode} ${response.body}');
+        throw Exception(
+          'Gemini API error: ${response.statusCode} ${response.body}',
+        );
       }
     } catch (e) {
       // Log error but don't crash the app — summary generation is non-critical
@@ -182,35 +189,39 @@ TAGS: [tag1, tag2, tag3]
       // SUMMARY: Reviewers love the smoked hilsa here...
       // TAGS: Smoked Fish, Intimate Ambience, Weekend Special
 
-      final lines = rawResponse.trim().split('\n');
+      final normalized = rawResponse.trim();
+      final summaryMatch = RegExp(
+        r'summary:\s*(.*?)(?:\n\s*tags\s*:|$)',
+        caseSensitive: false,
+        dotAll: true,
+      ).firstMatch(normalized);
+      final tagsMatch = RegExp(
+        r'(?:^|\n)\s*tags\s*:\s*(.*)$',
+        caseSensitive: false,
+        dotAll: true,
+      ).firstMatch(normalized);
 
-      String summary = '';
-      List<String> tags = [];
+      final summary = (summaryMatch?.group(1) ?? normalized)
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
 
-      for (final line in lines) {
-        if (line.startsWith('SUMMARY:')) {
-          summary = line.replaceFirst('SUMMARY:', '').trim();
-        } else if (line.startsWith('TAGS:')) {
-          final tagsRaw = line.replaceFirst('TAGS:', '').trim();
-          tags = tagsRaw
-              .split(',')
-              .map((t) => t.trim())
-              .where((t) => t.isNotEmpty)
-              .take(3) // ensure max 3 tags
-              .toList();
-        }
-      }
+      final tagsRaw = tagsMatch?.group(1) ?? '';
+      final tags = tagsRaw
+          .split(',')
+          .map((t) => t.replaceAll(RegExp(r'^[\-\*\d\.\s]+'), '').trim())
+          .where((t) => t.isNotEmpty)
+          .take(3)
+          .toList();
 
-      // Validate we got both parts
-      if (summary.isEmpty || tags.length < 3) {
-        debugPrint('[AiSummaryApi] Parsing failed — unexpected format: $rawResponse');
+      // Tags are nice-to-have; do not block a valid summary from displaying.
+      if (summary.isEmpty) {
+        debugPrint(
+          '[AiSummaryApi] Parsing failed — unexpected format: $rawResponse',
+        );
         return null;
       }
 
-      return {
-        'summary': summary,
-        'tags': tags,
-      };
+      return {'summary': summary, 'tags': tags};
     } catch (e) {
       debugPrint('[AiSummaryApi] Parse error: $e');
       return null;
@@ -226,32 +237,64 @@ TAGS: [tag1, tag2, tag3]
     required String summary,
     required List<String> tags,
   }) async {
-    await _supabase.from('restaurants').update({
-      'ai_summary': summary,
-      'ai_tags': tags,
-    }).eq('id', restaurantId);
+    await _supabase
+        .from('restaurants')
+        .update({'ai_summary': summary, 'ai_tags': tags})
+        .eq('id', restaurantId);
   }
 
   // ─────────────────────────────────────────────
   // READ: Get existing summary for a restaurant
-  // Returns null if fewer than 5 reviews exist
+  // Returns null if fewer than 7 reviews exist or Gemini generation fails
   // This is the same as review_api.dart getRestaurantAiSummary()
   // but kept here for direct access if needed
   // ─────────────────────────────────────────────
   Future<Map<String, dynamic>?> getSummary(String restaurantId) async {
+    var response = await _fetchSavedSummary(restaurantId);
+
+    final savedSummary = response['ai_summary'] as String?;
+    if (savedSummary == null ||
+        savedSummary.trim().isEmpty ||
+        _looksTruncated(savedSummary)) {
+      final reviewCount = await _countUsableReviews(restaurantId);
+      if (reviewCount >= _minimumReviewCount) {
+        await generateAndSaveSummary(restaurantId);
+        response = await _fetchSavedSummary(restaurantId);
+      }
+    }
+
+    final summary = response['ai_summary'] as String?;
+    if (summary == null || summary.trim().isEmpty) {
+      return null; // fewer than 7 reviews or Gemini failed
+    }
+
+    return {
+      'ai_summary': summary,
+      'ai_tags': List<String>.from(response['ai_tags'] ?? []),
+    };
+  }
+
+  Future<int> _countUsableReviews(String restaurantId) async {
     final response = await _supabase
+        .from('reviews')
+        .select('id')
+        .eq('restaurant_id', restaurantId)
+        .eq('flagged', false);
+
+    return (response as List<dynamic>).length;
+  }
+
+  Future<Map<String, dynamic>> _fetchSavedSummary(String restaurantId) async {
+    return await _supabase
         .from('restaurants')
         .select('ai_summary, ai_tags')
         .eq('id', restaurantId)
         .single();
+  }
 
-    if (response['ai_summary'] == null) {
-      return null; // fewer than 5 reviews — show nothing on frontend
-    }
-
-    return {
-      'ai_summary': response['ai_summary'] as String,
-      'ai_tags': List<String>.from(response['ai_tags'] ?? []),
-    };
+  bool _looksTruncated(String summary) {
+    final trimmed = summary.trim();
+    if (trimmed.length < 40) return true;
+    return !RegExp(r'[.!?]$').hasMatch(trimmed);
   }
 }

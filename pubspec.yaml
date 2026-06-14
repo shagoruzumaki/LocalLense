@@ -28,3 +28,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: ArialUnicode
+      fonts:
+        - asset: assets/fonts/ArialUnicode.ttf
+    - family: SegoeUiEmoji
+      fonts:
+        - asset: assets/fonts/SegoeUiEmoji.ttf

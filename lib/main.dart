@@ -20,11 +20,12 @@ import 'package:local_lense/model/dish.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Supabase
   await Supabase.initialize(
     url: 'https://bevgjdxwozuezcunizho.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
   );
 
   runApp(const MyApp());
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
+        fontFamilyFallback: const ['ArialUnicode', 'SegoeUiEmoji'],
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFFD700),
           brightness: Brightness.dark,
@@ -51,7 +53,8 @@ class MyApp extends StatelessWidget {
         if (settings.name == '/restaurant-details') {
           final restaurantId = settings.arguments as String;
           return MaterialPageRoute(
-            builder: (context) => RestaurantDetailsPage(restaurantId: restaurantId),
+            builder: (context) =>
+                RestaurantDetailsPage(restaurantId: restaurantId),
           );
         }
         if (settings.name == '/dish-details') {
@@ -71,10 +74,10 @@ class MyApp extends StatelessWidget {
       routes: {
         '/landing': (_) => const LandingPage(),
         '/auth': (_) => AuthGate(
-              homeScreen: const HomePage(),
-              loginScreen: const LoginPage(),
-              resetPasswordScreen: const ResetPasswordPage(),
-            ),
+          homeScreen: const HomePage(),
+          loginScreen: const LoginPage(),
+          resetPasswordScreen: const ResetPasswordPage(),
+        ),
         '/login': (_) => const LoginPage(),
         '/register': (_) => const SignupPage(),
         '/forgot-password': (_) => const ForgotPasswordPage(),
