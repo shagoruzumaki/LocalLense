@@ -151,14 +151,10 @@ TAGS: [tag1, tag2, tag3]
     };
 
     try {
-      final response = await http.post(
-        Uri.parse(_geminiEndpoint),
-        headers: {
-          'Content-Type': 'application/json',
-          'X-goog-api-key': _geminiApiKey,
-        },
-        body: jsonEncode(requestBody),
-      );
+      var response = await _postGemini(requestBody, useHeaderKey: true);
+      if (response.statusCode == 401) {
+        response = await _postGemini(requestBody, useHeaderKey: false);
+      }
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -183,6 +179,26 @@ TAGS: [tag1, tag2, tag3]
   // STEP 3: Parse Gemini response
   // Extracts summary text and tags array
   // ─────────────────────────────────────────────
+  Future<http.Response> _postGemini(
+    Map<String, dynamic> requestBody, {
+    required bool useHeaderKey,
+  }) {
+    final uri = useHeaderKey
+        ? Uri.parse(_geminiEndpoint)
+        : Uri.parse(
+            _geminiEndpoint,
+          ).replace(queryParameters: {'key': _geminiApiKey});
+
+    return http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        if (useHeaderKey) 'X-goog-api-key': _geminiApiKey,
+      },
+      body: jsonEncode(requestBody),
+    );
+  }
+
   Map<String, dynamic>? _parseGeminiResponse(String rawResponse) {
     try {
       // Expected format:

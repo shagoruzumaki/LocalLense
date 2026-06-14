@@ -43,6 +43,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   List<Map<String, dynamic>> _dishes = [];
   bool _loadingDishes = false;
 
+  String? get _currentUserId => Supabase.instance.client.auth.currentUser?.id;
+
   // Real-time subscriptions
   StreamSubscription? _reviewSubscription;
   StreamSubscription? _restaurantSubscription;
@@ -219,7 +221,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     }
   }
 
-  void _openReviewForm() {
+  void _openReviewForm({Map<String, dynamic>? editReview}) {
     if (_data == null) return;
     showModalBottomSheet(
       context: context,
@@ -232,12 +234,71 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         restaurantId: _data!.restaurant.id,
         reviewApi: _reviewApi,
         availableDishes: _dishes,
+        editReview: editReview,
         onSubmitted: () {
-          // Real-time will handle the refresh, but we can switch tab immediately
+          final id = _data!.restaurant.id;
+          _fetchDetails(id, silent: true);
+          _loadReviews(id);
+          _loadDishes(id, silent: true);
           setState(() => _selectedTab = 2);
         },
       ),
     );
+  }
+
+  Future<void> _deleteReview(String reviewId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Delete Review',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Are you sure you want to delete this review?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(color: Colors.white38),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _reviewApi.deleteReview(reviewId);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Review deleted')));
+
+      if (_data != null) {
+        final id = _data!.restaurant.id;
+        _fetchDetails(id, silent: true);
+        _loadReviews(id);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete review: $e')));
+    }
   }
 
   void _navigateToDirections() {
@@ -1006,6 +1067,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     final tier = user['tier'] as String? ?? 'explorer';
     final name = user['name'] as String? ?? 'Anonymous';
     final verified = user['verified'] as bool? ?? false;
+    final isOwner = review['user_id'] == _currentUserId;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1121,42 +1183,76 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           const SizedBox(height: 12),
           const Divider(color: Colors.white10),
           const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () => _handleVote(reviewId),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isVoted
-                    ? const Color(0xFFFFD700).withOpacity(0.15)
-                    : Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isVoted
-                      ? const Color(0xFFFFD700).withOpacity(0.5)
-                      : Colors.white12,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isVoted ? Icons.thumb_up : Icons.thumb_up_outlined,
-                    color: isVoted ? const Color(0xFFFFD700) : Colors.white38,
-                    size: 16,
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => _handleVote(reviewId),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$helpfulVotes Helpful',
-                    style: TextStyle(
-                      color: isVoted ? const Color(0xFFFFD700) : Colors.white38,
-                      fontSize: 13,
-                      fontWeight: isVoted ? FontWeight.bold : FontWeight.normal,
+                  decoration: BoxDecoration(
+                    color: isVoted
+                        ? const Color(0xFFFFD700).withOpacity(0.15)
+                        : Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isVoted
+                          ? const Color(0xFFFFD700).withOpacity(0.5)
+                          : Colors.white12,
                     ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isVoted ? Icons.thumb_up : Icons.thumb_up_outlined,
+                        color: isVoted
+                            ? const Color(0xFFFFD700)
+                            : Colors.white38,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$helpfulVotes Helpful',
+                        style: TextStyle(
+                          color: isVoted
+                              ? const Color(0xFFFFD700)
+                              : Colors.white38,
+                          fontSize: 13,
+                          fontWeight: isVoted
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              const Spacer(),
+              if (isOwner) ...[
+                IconButton(
+                  tooltip: 'Edit review',
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    color: Color(0xFFFFD700),
+                    size: 18,
+                  ),
+                  onPressed: () => _openReviewForm(editReview: review),
+                ),
+                IconButton(
+                  tooltip: 'Delete review',
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                  onPressed: () => _deleteReview(reviewId),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -1386,12 +1482,14 @@ class _ReviewFormSheet extends StatefulWidget {
   final ReviewApi reviewApi;
   final List<Map<String, dynamic>> availableDishes;
   final VoidCallback onSubmitted;
+  final Map<String, dynamic>? editReview;
 
   const _ReviewFormSheet({
     required this.restaurantId,
     required this.reviewApi,
     required this.availableDishes,
     required this.onSubmitted,
+    this.editReview,
   });
 
   @override
@@ -1406,8 +1504,33 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   String _selectedMood = '';
   double _selectedRating = 0;
   List<XFile> _selectedPhotos = [];
+  List<String> _existingPhotos = [];
   final Set<String> _selectedDishes = {};
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final review = widget.editReview;
+    if (review == null) return;
+
+    _bodyController.text = review['body'] as String? ?? '';
+    _selectedMood = review['mood_tag'] as String? ?? '';
+    _selectedRating = (review['rating'] as num?)?.toDouble() ?? 0;
+    _existingPhotos = List<String>.from(review['photos'] ?? []);
+
+    final dishMentions = List<String>.from(review['dish_mentions'] ?? []);
+    _selectedDishes.addAll(dishMentions);
+    final knownDishNames = widget.availableDishes
+        .map((dish) => dish['name'] as String? ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet();
+    final manualDishes = dishMentions
+        .where((dish) => !knownDishNames.contains(dish))
+        .toList();
+    _dishController.text = manualDishes.join(', ');
+  }
 
   Future<void> _pickPhotos() async {
     final picked = await _picker.pickMultiImage(imageQuality: 80);
@@ -1445,7 +1568,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
       );
       return;
     }
-    if (_selectedPhotos.isEmpty) {
+    if (_selectedPhotos.isEmpty && _existingPhotos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('At least 1 photo is required.')),
       );
@@ -1469,6 +1592,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
     setState(() => _submitting = true);
     try {
       final photoUrls = await _uploadPhotos();
+      final allPhotoUrls = [..._existingPhotos, ...photoUrls];
 
       final Set<String> allDishes = Set.from(_selectedDishes);
       if (_dishController.text.trim().isNotEmpty) {
@@ -1484,18 +1608,26 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
         restaurantId: widget.restaurantId,
         moodTag: _selectedMood,
         rating: _selectedRating,
-        photoUrls: photoUrls,
+        photoUrls: allPhotoUrls,
         body: _bodyController.text.trim(),
         dishMentions: allDishes.toList(),
       );
+
+      if (widget.editReview != null) {
+        await widget.reviewApi.deleteReview(widget.editReview!['id'] as String);
+      }
 
       if (mounted) {
         Navigator.pop(context);
         widget.onSubmitted();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Review submitted successfully!'),
-            backgroundColor: Color(0xFFFFD700),
+          SnackBar(
+            content: Text(
+              widget.editReview != null
+                  ? 'Review updated!'
+                  : 'Review submitted successfully!',
+            ),
+            backgroundColor: const Color(0xFFFFD700),
           ),
         );
       }
@@ -1533,9 +1665,9 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Write a Review',
-              style: TextStyle(
+            Text(
+              widget.editReview != null ? 'Edit Review' : 'Write a Review',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -1632,54 +1764,101 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 ),
               ],
             ),
-            if (_selectedPhotos.isNotEmpty) ...[
+            if (_existingPhotos.isNotEmpty || _selectedPhotos.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
                 height: 80,
-                child: ListView.separated(
+                child: ListView(
                   scrollDirection: Axis.horizontal,
-                  itemCount: _selectedPhotos.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) => Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: kIsWeb
-                            ? Image.network(
-                                _selectedPhotos[i].path,
-                                width: 80,
-                                height: 80,
-                                fit: BoxFit.cover,
-                              )
-                            : Image.file(
-                                File(_selectedPhotos[i].path),
+                  children: [
+                    ..._existingPhotos.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final url = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                url,
                                 width: 80,
                                 height: 80,
                                 fit: BoxFit.cover,
                               ),
-                      ),
-                      Positioned(
-                        top: 2,
-                        right: 2,
-                        child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _selectedPhotos.removeAt(i)),
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: const BoxDecoration(
-                              color: Colors.black54,
-                              shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 12,
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _existingPhotos.removeAt(i)),
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
+                      );
+                    }),
+                    ..._selectedPhotos.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final photo = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: kIsWeb
+                                  ? Image.network(
+                                      photo.path,
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.file(
+                                      File(photo.path),
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _selectedPhotos.removeAt(i)),
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               ),
             ],
@@ -1824,9 +2003,11 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                           color: Colors.black,
                         ),
                       )
-                    : const Text(
-                        'Submit Review',
-                        style: TextStyle(
+                    : Text(
+                        widget.editReview != null
+                            ? 'Update Review'
+                            : 'Submit Review',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -1840,6 +2021,9 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
     );
   }
 
+  // ═══════════════════════════════════════════════
+  // MOOD BUTTON
+  // ═══════════════════════════════════════════════
   @override
   void dispose() {
     _bodyController.dispose();
@@ -1848,9 +2032,6 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   }
 }
 
-// ═══════════════════════════════════════════════
-// MOOD BUTTON
-// ═══════════════════════════════════════════════
 class _MoodButton extends StatelessWidget {
   final String emoji;
   final String label;
