@@ -3,6 +3,7 @@ import '../services/top10_service.dart';
 import '../services/location_service.dart';
 import '../services/restaurant_service.dart';
 import '../model/restaurant.dart';
+import 'reviewer_profile_page.dart';
 
 class RankingPage extends StatefulWidget {
   final int initialIndex;
@@ -234,6 +235,16 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
             '${c['helpful_votes'] ?? 0} Votes • ${c['rank_score'] ?? 0} Points',
             (c['tier'] ?? 'EXPLORER').toString().toUpperCase(),
             photoUrl: c['profile_photo_url'],
+            onTap: () {
+              if (c['id'] != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ReviewerProfilePage(userId: c['id']),
+                  ),
+                );
+              }
+            },
           ),
         );
       },
@@ -391,53 +402,56 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildCriticItem(String rank, String name, String stats, String tier, {String? photoUrl}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 30,
-            child: Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'serif')),
-          ),
-          const SizedBox(width: 16),
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: Colors.white10,
-            backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-            child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 25, color: Colors.white38) : null,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.verified, color: Colors.blue, size: 14),
-                  ],
-                ),
-                Text(stats, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-              ],
+  Widget _buildCriticItem(String rank, String name, String stats, String tier, {String? photoUrl, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 30,
+              child: Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'serif')),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
+            const SizedBox(width: 16),
+            CircleAvatar(
+              radius: 25,
+              backgroundColor: Colors.white10,
+              backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 25, color: Colors.white38) : null,
             ),
-            child: Text(tier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.verified, color: Colors.blue, size: 14),
+                    ],
+                  ),
+                  Text(stats, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFD700).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
+              ),
+              child: Text(tier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }

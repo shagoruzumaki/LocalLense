@@ -8,6 +8,7 @@ import '../services/user_service.dart';
 import '../model/restaurant.dart';
 import '../model/dish.dart';
 import 'ranking_page.dart';
+import 'reviewer_profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -414,6 +415,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         points: '${c['helpful_votes'] ?? 0} Pts',
                         photoUrl: c['profile_photo_url'],
                         isLast: idx == displayCritics.length - 1,
+                        onTap: () {
+                          if (c['id'] != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ReviewerProfilePage(userId: c['id']),
+                              ),
+                            );
+                          }
+                        },
                       );
                     }),
                     _buildSeeMoreButton('View Leaderboard', () {
@@ -509,19 +520,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     ]);
   }
 
-  Widget _buildTop10CriticRow({required String rank, required String name, required String tier, required String points, String? photoUrl, bool isLast = false}) {
+  Widget _buildTop10CriticRow({required String rank, required String name, required String tier, required String points, String? photoUrl, bool isLast = false, VoidCallback? onTap}) {
     return Column(children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            SizedBox(width: 28, child: Text(rank, style: const TextStyle(color: Colors.white38, fontWeight: FontWeight.bold, fontSize: 13))),
-            const SizedBox(width: 10),
-            CircleAvatar(radius: 18, backgroundColor: Colors.white10, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 16, color: Colors.white38) : null),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis), Text(tier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold))])),
-            Text(points, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          ],
+      GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              SizedBox(width: 28, child: Text(rank, style: const TextStyle(color: Colors.white38, fontWeight: FontWeight.bold, fontSize: 13))),
+              const SizedBox(width: 10),
+              CircleAvatar(radius: 18, backgroundColor: Colors.white10, backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null, child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 16, color: Colors.white38) : null),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis), Text(tier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold))])),
+              Text(points, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+          ),
         ),
       ),
       if (!isLast) Divider(color: Colors.white.withValues(alpha: 0.06), height: 1, indent: 16, endIndent: 16),
