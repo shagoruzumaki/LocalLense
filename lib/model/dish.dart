@@ -12,6 +12,8 @@ class Dish {
   final String? restaurantName;
   final double? restaurantRating;
   final String? restaurantAddress;
+  final double? restaurantLatitude;
+  final double? restaurantLongitude;
 
   // Trending Metrics
   final double trendingScore;
@@ -29,6 +31,8 @@ class Dish {
     this.restaurantName,
     this.restaurantRating,
     this.restaurantAddress,
+    this.restaurantLatitude,
+    this.restaurantLongitude,
     this.trendingScore = 0.0,
     this.mentionCount = 0,
   });
@@ -59,6 +63,8 @@ class Dish {
               : (restaurant['rating'] as num?)?.toDouble())
           : null,
       restaurantAddress: restaurant?['address'],
+      restaurantLatitude: (restaurant?['latitude'] as num?)?.toDouble(),
+      restaurantLongitude: (restaurant?['longitude'] as num?)?.toDouble(),
       trendingScore: (json['trending_score'] as num?)?.toDouble() ?? 0.0,
       mentionCount: json['mention_count'] ?? 0,
     );
@@ -77,6 +83,8 @@ class Dish {
       restaurantName: restaurantName,
       restaurantRating: restaurantRating,
       restaurantAddress: restaurantAddress,
+      restaurantLatitude: restaurantLatitude,
+      restaurantLongitude: restaurantLongitude,
       trendingScore: trendingScore ?? this.trendingScore,
       mentionCount: mentionCount ?? this.mentionCount,
     );
