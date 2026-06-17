@@ -61,18 +61,19 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
         _userLng = position.longitude;
         _currentLocationName = await _restaurantService.getNeighbourhoodName(_userLat!, _userLng!);
       } else {
-        // Fallback Default (Dhaka)
-        _userLat = 23.8103;
-        _userLng = 90.4125;
-        _currentLocationName = 'Dhaka';
+        _userLat = null;
+        _userLng = null;
+        _currentLocationName = 'Global';
       }
 
       // Fetch all dynamic sections in parallel with live location
       final results = await Future.wait([
-        _discoveryService.getTrendingDishes(),
+        _discoveryService.getTrendingDishes(lat: _userLat, lng: _userLng),
         _discoveryService.getPopularDishes(lat: _userLat, lng: _userLng),
         _discoveryService.getTopRated(lat: _userLat, lng: _userLng),
-        _discoveryService.getNearbyNow(lat: _userLat!, lng: _userLng!),
+        (_userLat != null && _userLng != null) 
+            ? _discoveryService.getNearbyNow(lat: _userLat!, lng: _userLng!)
+            : Future.value(<RestaurantWithScore>[]),
         _discoveryService.getBudgetEats(lat: _userLat, lng: _userLng),
         _discoveryService.getRecommended(lat: _userLat, lng: _userLng),
         _discoveryService.getHiddenGems(lat: _userLat, lng: _userLng),
@@ -100,7 +101,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _currentLocationName = 'Discover';
+          _currentLocationName = 'Global';
         });
       }
     }

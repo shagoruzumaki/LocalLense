@@ -74,7 +74,7 @@ class RestaurantService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List elements = data['elements'] ?? [];
-        if (elements.isEmpty) return _getMockData();
+        if (elements.isEmpty) return [];
 
         List<Restaurant> spots = elements.map((e) => Restaurant.fromOverpassJson(e)).toList();
         
@@ -90,7 +90,7 @@ class RestaurantService {
     } catch (e) {
       print('OSM Fetch Error: $e');
     }
-    return _getMockData();
+    return [];
   }
 
   // --- 3.2 MAPS & LOCATION SERVICES ---
@@ -102,7 +102,7 @@ class RestaurantService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final address = data['address'];
-        return address['suburb'] ?? address['neighbourhood'] ?? address['village'] ?? address['town'] ?? address['city'] ?? 'Dhaka';
+        return address['suburb'] ?? address['neighbourhood'] ?? address['village'] ?? address['town'] ?? address['city'] ?? 'Nearby';
       }
     } catch (_) {}
     return 'Nearby';
@@ -128,49 +128,22 @@ class RestaurantService {
   Future<Position> _determinePosition() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return _dhakaFallback();
+      if (!serviceEnabled) return _defaultFallback();
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return _dhakaFallback();
+        if (permission == LocationPermission.denied) return _defaultFallback();
       }
       return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium)
-          .timeout(const Duration(seconds: 8), onTimeout: () => _dhakaFallback());
+          .timeout(const Duration(seconds: 8), onTimeout: () => _defaultFallback());
     } catch (_) {
-      return _dhakaFallback();
+      return _defaultFallback();
     }
   }
 
-  Position _dhakaFallback() => Position(
-    latitude: 23.8103, longitude: 90.4125, timestamp: DateTime.now(),
+  Position _defaultFallback() => Position(
+    latitude: 0.0, longitude: 0.0, timestamp: DateTime.now(),
     accuracy: 0, altitude: 0, heading: 0, speed: 0, speedAccuracy: 0,
     altitudeAccuracy: 0, headingAccuracy: 0,
   );
-
-  List<Restaurant> _getMockData() {
-    return [
-      Restaurant(
-        id: 'mock1',
-        name: 'The Spice Trail',
-        category: 'Indian',
-        address: 'Banani, Dhaka',
-        latitude: 23.7937,
-        longitude: 90.4066,
-        priceTier: 2,
-        algorithmScore: 98.0,
-        photos: ['https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=500'],
-      ),
-      Restaurant(
-        id: 'mock2',
-        name: 'Urban Grill',
-        category: 'BBQ',
-        address: 'Gulshan, Dhaka',
-        latitude: 23.7925,
-        longitude: 90.4162,
-        priceTier: 3,
-        algorithmScore: 92.0,
-        photos: ['https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=500'],
-      ),
-    ];
-  }
 }

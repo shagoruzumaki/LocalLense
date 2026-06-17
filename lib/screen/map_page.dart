@@ -245,7 +245,7 @@ class _MapPageState extends State<MapPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _userLocation.latitude == 0 ? const LatLng(23.8103, 90.4125) : _userLocation,
+              initialCenter: _userLocation.latitude == 0 ? const LatLng(0, 0) : _userLocation,
               initialZoom: 15,
               onPositionChanged: (position, hasGesture) {
                 if (hasGesture && _isFollowingUser) {

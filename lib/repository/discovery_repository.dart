@@ -33,27 +33,39 @@ class DiscoveryRepository {
     } catch (e) { rethrow; }
   }
 
-  // 🔥 Trending Dishes This Week - Combined Trending Score Approach
-  Future<List<Dish>> getTrendingDishes({int limit = 10}) async {
+  // 🔥 Trending Dishes This Week - Enhanced Dynamic & Location Based
+  Future<List<Dish>> getTrendingDishes({double? userLat, double? userLng, int limit = 10}) async {
     try {
+      // Fetch a larger batch of trending dishes to ensure local ones are included
       final List response = await _db.from('dishes')
           .select('*, restaurants!inner(*)')
           .eq('is_available', true)
-          .order('restaurants(algorithm_score)', ascending: false)
-          .order('created_at', ascending: false)
-          .limit(limit);
-      return response.map((json) => Dish.fromSupabase(json)).toList();
-    } catch (e) { 
-       try {
-        final List response = await _db.from('dishes')
-            .select('*, restaurants!inner(*)')
-            .eq('is_available', true)
-            .limit(limit);
-        return response.map((json) => Dish.fromSupabase(json)).toList();
-      } catch (_) {
-        return []; 
+          .order('trending_score', ascending: false)
+          .limit(200); 
+      
+      List<Dish> dishes = response.map((json) => Dish.fromSupabase(json)).toList();
+
+      if (userLat != null && userLng != null) {
+        dishes.sort((a, b) {
+          double distA = LocationUtils.calculateDistance(userLat, userLng, a.restaurantLatitude ?? 0, a.restaurantLongitude ?? 0);
+          double distB = LocationUtils.calculateDistance(userLat, userLng, b.restaurantLatitude ?? 0, b.restaurantLongitude ?? 0);
+
+          // Boost local dishes significantly if within 15km
+          double boostA = distA < 15 ? 3.0 : 1.0;
+          double boostB = distB < 15 ? 3.0 : 1.0;
+
+          // Decay function to penalize far away dishes
+          double decayA = 1 / (1 + (distA / 50));
+          double decayB = 1 / (1 + (distB / 50));
+
+          double scoreA = a.trendingScore * boostA * decayA;
+          double scoreB = b.trendingScore * boostB * decayB;
+          return scoreB.compareTo(scoreA);
+        });
       }
-    }
+
+      return dishes.take(limit).toList();
+    } catch (e) { return []; }
   }
 
   // 🍽️ Popular Dishes Near You
@@ -62,15 +74,58 @@ class DiscoveryRepository {
       final List response = await _db.from('dishes')
           .select('*, restaurants!inner(*)')
           .eq('is_available', true)
-          .order('restaurants(algorithm_score)', ascending: false)
-          .limit(limit);
-      return response.map((json) => Dish.fromSupabase(json)).toList();
+          .order('mention_count', ascending: false)
+          .limit(200);
+          
+      List<Dish> dishes = response.map((json) => Dish.fromSupabase(json)).toList();
+
+      if (userLat != null && userLng != null) {
+        dishes.sort((a, b) {
+          double distA = LocationUtils.calculateDistance(userLat, userLng, a.restaurantLatitude ?? 0, a.restaurantLongitude ?? 0);
+          double distB = LocationUtils.calculateDistance(userLat, userLng, b.restaurantLatitude ?? 0, b.restaurantLongitude ?? 0);
+          
+          double boostA = distA < 15 ? 3.0 : 1.0;
+          double boostB = distB < 15 ? 3.0 : 1.0;
+
+          double scoreA = a.mentionCount * boostA / (1 + distA / 20);
+          double scoreB = b.mentionCount * boostB / (1 + distB / 20);
+          return scoreB.compareTo(scoreA);
+        });
+      }
+      return dishes.take(limit).toList();
     } catch (e) { return []; }
   }
 
-  // ⭐ Top Rated Restaurants
+  // ⭐ Top Rated Restaurants - Now Location Based
   Future<List<RestaurantWithScore>> getTopRated({double? userLat, double? userLng, int limit = 10}) async {
-    return getRanked(userLat: userLat, userLng: userLng, limit: limit);
+    try {
+      final List response = await _db.from('restaurants')
+          .select()
+          .eq('active', true)
+          .order('algorithm_score', ascending: false)
+          .limit(100);
+      
+      final restaurants = response.map((json) => Restaurant.fromSupabase(json)).toList();
+      final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
+      var result = _enrich(restaurants, scores, userLat, userLng);
+
+      if (userLat != null && userLng != null) {
+        result.sort((a, b) {
+          double distA = a.distanceKm ?? 1000;
+          double distB = b.distanceKm ?? 1000;
+          
+          // Penalty decay: items within 10km get preference, then global scores take over
+          double penaltyA = 1 + (distA / 10);
+          double penaltyB = 1 + (distB / 10);
+          
+          double scoreA = (a.restaurant.algorithmScore ?? 0) / penaltyA;
+          double scoreB = (b.restaurant.algorithmScore ?? 0) / penaltyB;
+          
+          return scoreB.compareTo(scoreA);
+        });
+      }
+      return result.take(limit).toList();
+    } catch (e) { return []; }
   }
 
   // 🚶 Nearby Right Now
@@ -86,10 +141,28 @@ class DiscoveryRepository {
           .eq('is_available', true)
           .gte('price', 1)
           .lte('price', 250) 
-          .order('restaurants(algorithm_score)', ascending: false)
           .order('price', ascending: true)
-          .limit(limit);
-      return response.map((json) => Dish.fromSupabase(json)).toList();
+          .limit(200);
+          
+      List<Dish> dishes = response.map((json) => Dish.fromSupabase(json)).toList();
+
+      if (userLat != null && userLng != null) {
+        dishes.sort((a, b) {
+          double distA = LocationUtils.calculateDistance(userLat, userLng, a.restaurantLatitude ?? 0, a.restaurantLongitude ?? 0);
+          double distB = LocationUtils.calculateDistance(userLat, userLng, b.restaurantLatitude ?? 0, b.restaurantLongitude ?? 0);
+          
+          double ratingA = a.restaurantRating ?? 4.0;
+          double ratingB = b.restaurantRating ?? 4.0;
+          
+          double boostA = distA < 15 ? 2.5 : 1.0;
+          double boostB = distB < 15 ? 2.5 : 1.0;
+
+          double scoreA = ratingA * boostA / (1 + distA / 30);
+          double scoreB = ratingB * boostB / (1 + distB / 30);
+          return scoreB.compareTo(scoreA);
+        });
+      }
+      return dishes.take(limit).toList();
     } catch (e) { return []; }
   }
 
@@ -100,10 +173,22 @@ class DiscoveryRepository {
           .select()
           .eq('active', true)
           .order('algorithm_score', ascending: false)
-          .limit(limit);
+          .limit(100);
       final restaurants = response.map((json) => Restaurant.fromSupabase(json)).toList();
       final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
-      return _enrich(restaurants, scores, userLat, userLng);
+      var enriched = _enrich(restaurants, scores, userLat, userLng);
+      
+      if (userLat != null && userLng != null) {
+        enriched.sort((a, b) {
+          double distA = a.distanceKm ?? 1000;
+          double distB = b.distanceKm ?? 1000;
+          double scoreA = (a.restaurant.algorithmScore ?? 0) / (1 + distA / 10);
+          double scoreB = (b.restaurant.algorithmScore ?? 0) / (1 + distB / 10);
+          return scoreB.compareTo(scoreA);
+        });
+      }
+      
+      return enriched.take(limit).toList();
     } catch (e) { return []; }
   }
 
@@ -115,12 +200,19 @@ class DiscoveryRepository {
           .eq('active', true)
           .gt('algorithm_score', 70)
           .order('algorithm_score', ascending: false)
-          .limit(50);
+          .limit(100);
 
       final restaurants = response.map((json) => Restaurant.fromSupabase(json)).toList();
       final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
       var enriched = _enrich(restaurants, scores, userLat, userLng);
+      
+      // Filter by low review count and sort by proximity
       enriched = enriched.where((e) => (e.score?.reviewCount ?? 0) < 30).toList();
+      
+      if (userLat != null && userLng != null) {
+        enriched.sort((a, b) => (a.distanceKm ?? 1000).compareTo(b.distanceKm ?? 1000));
+      }
+      
       return enriched.take(limit).toList();
     } catch (e) { return []; }
   }
@@ -139,10 +231,9 @@ class DiscoveryRepository {
     } catch (e) { return []; }
   }
 
-  // 🎉 Offers & Deals - Returns Restaurants that have offers
+  // 🎉 Offers & Deals
   Future<List<RestaurantWithScore>> getOffersAndDeals({int limit = 10}) async {
     try {
-      // Find restaurants that have dishes with offers in name or description
       final List dishResponse = await _db.from('dishes')
           .select('restaurant_id')
           .eq('is_available', true)
@@ -166,7 +257,7 @@ class DiscoveryRepository {
   }
 
   // ─────────────────────────────────────────────
-  // 🗺️ Explore by Area - Improved for live location formatting
+  // 🗺️ Explore by Area
   // ─────────────────────────────────────────────
   Future<List<String>> getAreas({double? userLat, double? userLng}) async {
     try {
@@ -177,7 +268,6 @@ class DiscoveryRepository {
       final List<Map<String, dynamic>> records = List<Map<String, dynamic>>.from(response);
       
       if (userLat != null && userLng != null) {
-        // Sort by proximity
         records.sort((a, b) {
           final dA = LocationUtils.calculateDistance(userLat, userLng, (a['latitude'] as num).toDouble(), (a['longitude'] as num).toDouble());
           final dB = LocationUtils.calculateDistance(userLat, userLng, (b['latitude'] as num).toDouble(), (b['longitude'] as num).toDouble());
@@ -200,7 +290,7 @@ class DiscoveryRepository {
       }
 
       return areas.take(15).toList();
-    } catch (e) { return ['Sylhet (Zindabazar)', 'Sylhet (Kumarpara)', 'Sylhet (Amberkhana)', 'Sylhet (Bondorbazar)']; }
+    } catch (e) { return []; }
   }
 
   Future<List<RestaurantWithScore>> getAllTimeLeaderboard() async {

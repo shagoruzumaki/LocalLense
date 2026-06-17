@@ -50,8 +50,8 @@ class DiscoveryService {
     );
   }
 
-  // New Discovery Methods
-  Future<List<Dish>> getTrendingDishes() => _repository.getTrendingDishes();
+  // New Discovery Methods - Updated for Location Support
+  Future<List<Dish>> getTrendingDishes({double? lat, double? lng}) => _repository.getTrendingDishes(userLat: lat, userLng: lng);
   Future<List<Dish>> getPopularDishes({double? lat, double? lng}) => _repository.getPopularDishes(userLat: lat, userLng: lng);
   Future<List<RestaurantWithScore>> getTopRated({double? lat, double? lng}) => _repository.getTopRated(userLat: lat, userLng: lng);
   Future<List<RestaurantWithScore>> getNearbyNow({required double lat, required double lng}) => _repository.getNearbyNow(userLat: lat, userLng: lng);

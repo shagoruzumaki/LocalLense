@@ -104,7 +104,7 @@ class Restaurant {
       id: json['id'].toString(),
       name: tags['name'] ?? 'Local Eatery',
       category: tags['cuisine']?.toString().toLowerCase() ?? 'restaurant',
-      address: tags['addr:street'] ?? 'Nearby Dhaka',
+      address: tags['addr:street'] ?? 'Nearby',
       latitude: lat,
       longitude: lon,
       priceTier: 2,

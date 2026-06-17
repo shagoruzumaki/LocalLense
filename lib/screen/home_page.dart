@@ -81,8 +81,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _loadData() async {
-    double lat = 23.8103; // Default Dhaka
-    double lng = 90.4125;
+    double? lat;
+    double? lng;
     String currentNeighbourhood = 'Global';
 
     try {
@@ -102,15 +102,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     if (mounted) {
       setState(() {
         _neighbourhood = currentNeighbourhood;
-        _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: lat, lng: lng, radiusKm: 10);
+        if (lat != null && lng != null) {
+          _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: lat, lng: lng, radiusKm: 10);
+        } else {
+          _nearbyRestaurantsFuture = Future.value([]);
+        }
+        
         // Use 'week' for Home Page to make it dynamic/trending
         _top10RestaurantsFuture = _top10Service.getTopRestaurantsByPeriod(
           filter: 'week', 
-          neighbourhood: currentNeighbourhood
+          neighbourhood: currentNeighbourhood == 'Global' ? null : currentNeighbourhood
         );
         _top10CriticsFuture = _top10Service.getTopCritics(
           filter: 'week',
-          neighbourhood: currentNeighbourhood
+          neighbourhood: currentNeighbourhood == 'Global' ? null : currentNeighbourhood
         );
       });
     }
