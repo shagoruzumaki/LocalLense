@@ -385,6 +385,12 @@ class DiscoveryRepository {
       var result = _enrich(restaurants, scores, userLat, userLng);
       
       if (openNow) result = result.where((r) => r.isOpenNow).toList();
+      
+      // Filter by 50km radius if location is provided
+      if (userLat != null && userLng != null) {
+        result = result.where((r) => (r.distanceKm ?? 0) <= 50.0).toList();
+      }
+
       if (sortBy == SortOption.nearest) {
         result.sort((a, b) => (a.distanceKm ?? double.maxFinite).compareTo(b.distanceKm ?? double.maxFinite));
       } else {
@@ -394,7 +400,7 @@ class DiscoveryRepository {
     } catch (e) { return []; }
   }
 
-  Future<List<Dish>> searchDishes(String query, {int limit = 20}) async {
+  Future<List<Dish>> searchDishes(String query, {double? userLat, double? userLng, int limit = 20}) async {
     final q = query.trim();
     if (q.isEmpty) return [];
     
@@ -405,23 +411,36 @@ class DiscoveryRepository {
     }
 
     try {
+      List response;
       if (areaPart != null) {
         final List restaurantsResponse = await _db.from('restaurants').select('id').ilike('address', '%$areaPart%');
         final restaurantIds = restaurantsResponse.map((r) => r['id'].toString()).toList();
         if (restaurantIds.isEmpty) return [];
         
-        final List response = await _db.from('dishes')
+        response = await _db.from('dishes')
             .select('*, restaurants(*)')
             .inFilter('restaurant_id', restaurantIds)
-            .limit(limit);
-        return response.map((json) => Dish.fromSupabase(json)).toList();
+            .limit(100);
       } else {
-        final List response = await _db.from('dishes')
+        response = await _db.from('dishes')
             .select('*, restaurants(*)') 
             .ilike('name', '%$q%')
-            .limit(limit);
-        return response.map((json) => Dish.fromSupabase(json)).toList();
+            .limit(100);
       }
+
+      final List<Dish> dishes = response.map((json) => Dish.fromSupabase(json)).toList();
+
+      // Filter by 50km radius if location is provided
+      if (userLat != null && userLng != null) {
+        return dishes.where((d) {
+          final dist = LocationUtils.calculateDistance(
+            userLat, userLng, d.restaurantLatitude ?? 0, d.restaurantLongitude ?? 0
+          );
+          return dist <= 50.0;
+        }).take(limit).toList();
+      }
+
+      return dishes.take(limit).toList();
     } catch (e) {
        return [];
     }
