@@ -11,6 +11,8 @@ import '../model/restaurant.dart';
 import 'map_page.dart';
 import 'score_breakdown_page.dart';
 import 'reviewer_profile_page.dart';
+import '../model/dish.dart';
+import 'dish_details_page.dart';
 
 class RestaurantDetailsPage extends StatefulWidget {
   final String? restaurantId;
@@ -42,6 +44,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   // Dishes/Menu state
   List<Map<String, dynamic>> _dishes = [];
   bool _loadingDishes = false;
+
+  String? get _currentUserId => Supabase.instance.client.auth.currentUser?.id;
 
   // Real-time subscriptions
   StreamSubscription? _reviewSubscription;
@@ -155,9 +159,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       }
     } catch (e) {
       if (mounted && !silent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load reviews: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load reviews: $e')));
       }
     } finally {
       if (mounted && !silent) setState(() => _loadingReviews = false);
@@ -171,7 +175,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       final supabase = Supabase.instance.client;
       final response = await supabase
           .from('dishes')
-          .select('id, name, description, price, photo_url, is_available')
+          .select('id, name, description, price, photo_url, is_available, avg_rating, review_count')
           .eq('restaurant_id', restaurantId)
           .eq('is_available', true)
           .order('name', ascending: true);
@@ -212,14 +216,14 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
 
-  void _openReviewForm() {
+  void _openReviewForm({Map<String, dynamic>? editReview}) {
     if (_data == null) return;
     showModalBottomSheet(
       context: context,
@@ -232,12 +236,71 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         restaurantId: _data!.restaurant.id,
         reviewApi: _reviewApi,
         availableDishes: _dishes,
+        editReview: editReview,
         onSubmitted: () {
-          // Real-time will handle the refresh, but we can switch tab immediately
+          final id = _data!.restaurant.id;
+          _fetchDetails(id, silent: true);
+          _loadReviews(id);
+          _loadDishes(id, silent: true);
           setState(() => _selectedTab = 2);
         },
       ),
     );
+  }
+
+  Future<void> _deleteReview(String reviewId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Delete Review',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Are you sure you want to delete this review?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(color: Colors.white38),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _reviewApi.deleteReview(reviewId);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Review deleted')));
+
+      if (_data != null) {
+        final id = _data!.restaurant.id;
+        _fetchDetails(id, silent: true);
+        _loadReviews(id);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete review: $e')));
+    }
   }
 
   void _navigateToDirections() {
@@ -256,7 +319,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       return const Scaffold(
         backgroundColor: Color(0xFF0D0D0D),
         body: Center(
-            child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+          child: CircularProgressIndicator(color: Color(0xFFFFD700)),
+        ),
       );
     }
 
@@ -264,8 +328,11 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       return const Scaffold(
         backgroundColor: Color(0xFF0D0D0D),
         body: Center(
-            child: Text('Restaurant not found',
-                style: TextStyle(color: Colors.white))),
+          child: Text(
+            'Restaurant not found',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
       );
     }
 
@@ -312,8 +379,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                           children: [
                             Row(
                               children: [
-                                _buildBadge(r.categoryDisplay.toUpperCase(),
-                                    const Color(0xFFFFD700)),
+                                _buildBadge(
+                                  r.categoryDisplay.toUpperCase(),
+                                  const Color(0xFFFFD700),
+                                ),
                                 const SizedBox(width: 8),
                                 if (r.active)
                                   _buildBadge('VERIFIED', Colors.green),
@@ -332,7 +401,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                             Text(
                               r.address,
                               style: const TextStyle(
-                                  color: Colors.white70, fontSize: 16),
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
                             ),
                           ],
                         ),
@@ -346,8 +417,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 ),
                 actions: [
                   IconButton(
-                    icon:
-                    const Icon(Icons.bookmark_border, color: Colors.white),
+                    icon: const Icon(
+                      Icons.bookmark_border,
+                      color: Colors.white,
+                    ),
                     onPressed: () {},
                   ),
                 ],
@@ -379,26 +452,29 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                               Row(
                                 children: [
                                   _buildScoreCircle(
-                                      (r.algorithmScore ?? 0).toInt()),
+                                    (r.algorithmScore ?? 0).toInt(),
+                                  ),
                                   const SizedBox(width: 20),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Algorithm Score',
                                           style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold),
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         Text(
                                           _data!.scoreLabel,
                                           style: const TextStyle(
-                                              color: Color(0xFFFFD700),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold),
+                                            color: Color(0xFFFFD700),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -413,18 +489,25 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                                     child: ElevatedButton(
                                       onPressed: () {},
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                        const Color(0xFFFFD700),
+                                        backgroundColor: const Color(
+                                          0xFFFFD700,
+                                        ),
                                         foregroundColor: Colors.black,
                                         shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(12)),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 15),
+                                          vertical: 15,
+                                        ),
                                       ),
-                                      child: const Text('BOOK TABLE',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold)),
+                                      child: const Text(
+                                        'BOOK TABLE',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
@@ -434,15 +517,18 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: Colors.white,
                                         side: const BorderSide(
-                                            color: Colors.white24),
+                                          color: Colors.white24,
+                                        ),
                                         shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(12)),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 15),
+                                          vertical: 15,
+                                        ),
                                       ),
-                                      child:
-                                      const Icon(Icons.share_outlined),
+                                      child: const Icon(Icons.share_outlined),
                                     ),
                                   ),
                                 ],
@@ -457,25 +543,25 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           _TabItem(
-                              label: 'OVERVIEW',
-                              isSelected: _selectedTab == 0,
-                              onTap: () =>
-                                  setState(() => _selectedTab = 0)),
+                            label: 'OVERVIEW',
+                            isSelected: _selectedTab == 0,
+                            onTap: () => setState(() => _selectedTab = 0),
+                          ),
                           _TabItem(
-                              label: 'MENU',
-                              isSelected: _selectedTab == 1,
-                              onTap: () =>
-                                  setState(() => _selectedTab = 1)),
+                            label: 'MENU',
+                            isSelected: _selectedTab == 1,
+                            onTap: () => setState(() => _selectedTab = 1),
+                          ),
                           _TabItem(
-                              label: 'REVIEWS',
-                              isSelected: _selectedTab == 2,
-                              onTap: () =>
-                                  setState(() => _selectedTab = 2)),
+                            label: 'REVIEWS',
+                            isSelected: _selectedTab == 2,
+                            onTap: () => setState(() => _selectedTab = 2),
+                          ),
                           _TabItem(
-                              label: 'PHOTOS',
-                              isSelected: _selectedTab == 3,
-                              onTap: () =>
-                                  setState(() => _selectedTab = 3)),
+                            label: 'PHOTOS',
+                            isSelected: _selectedTab == 3,
+                            onTap: () => setState(() => _selectedTab = 3),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 25),
@@ -502,23 +588,23 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.9)
-                  ],
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
                 ),
               ),
               child: ElevatedButton.icon(
                 onPressed: _openReviewForm,
                 icon: const Icon(Icons.edit_outlined),
-                label: const Text('Write a Review',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Write a Review',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 54),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
               ),
             ),
@@ -563,7 +649,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   color: Colors.white10,
                   image: const DecorationImage(
                     image: NetworkImage(
-                        'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=500&auto=format&fit=crop'),
+                      'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=500&auto=format&fit=crop',
+                    ),
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -571,13 +658,20 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
               const SizedBox(height: 15),
               Row(
                 children: [
-                  const Icon(Icons.location_on_outlined,
-                      color: Color(0xFFFFD700), size: 20),
+                  const Icon(
+                    Icons.location_on_outlined,
+                    color: Color(0xFFFFD700),
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(r.address,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 14)),
+                    child: Text(
+                      r.address,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -587,8 +681,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         const SizedBox(height: 10),
         Row(
           children: [
-            const Icon(Icons.access_time,
-                color: Color(0xFFFFD700), size: 20),
+            const Icon(Icons.access_time, color: Color(0xFFFFD700), size: 20),
             const SizedBox(width: 10),
             Text(
               _data!.isOpenNow ? 'Open Now' : 'Closed',
@@ -615,8 +708,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         decoration: BoxDecoration(
           color: const Color(0xFFFFD700).withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
-          border:
-          Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
+          border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
         ),
         child: const Row(
           children: [
@@ -624,17 +716,21 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Color(0xFFFFD700)),
+                strokeWidth: 2,
+                color: Color(0xFFFFD700),
+              ),
             ),
             SizedBox(width: 12),
-            Text('Generating community summary...',
-                style: TextStyle(color: Colors.white38, fontSize: 13)),
+            Text(
+              'Generating community summary...',
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
           ],
         ),
       );
     }
 
-    // State 2: No summary yet — fewer than 5 reviews
+    // State 2: No summary yet — fewer than 7 reviews
     if (_aiSummary == null) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -649,7 +745,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Community summary appears after 5 reviews.',
+                'Community summary appears after 7 reviews.',
                 style: TextStyle(color: Colors.white38, fontSize: 13),
               ),
             ),
@@ -671,8 +767,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         children: [
           // AI badge
           Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: const Color(0xFFFFD700).withOpacity(0.15),
               borderRadius: BorderRadius.circular(6),
@@ -680,15 +775,15 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.auto_awesome,
-                    color: Color(0xFFFFD700), size: 12),
+                Icon(Icons.auto_awesome, color: Color(0xFFFFD700), size: 12),
                 SizedBox(width: 4),
                 Text(
                   'AI Summary',
                   style: TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold),
+                    color: Color(0xFFFFD700),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -698,9 +793,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           Text(
             '"$_aiSummary"',
             style: const TextStyle(
-                color: Colors.white70,
-                fontStyle: FontStyle.italic,
-                height: 1.5),
+              color: Colors.white70,
+              fontStyle: FontStyle.italic,
+              height: 1.5,
+            ),
           ),
           // Keyword tags
           if (_aiTags.isNotEmpty) ...[
@@ -709,25 +805,29 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
               spacing: 8,
               runSpacing: 6,
               children: _aiTags
-                  .map((tag) => Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color:
-                  const Color(0xFFFFD700).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: const Color(0xFFFFD700)
-                          .withOpacity(0.3)),
-                ),
-                child: Text(
-                  tag,
-                  style: const TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600),
-                ),
-              ))
+                  .map(
+                    (tag) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFD700).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFFFFD700).withOpacity(0.3),
+                        ),
+                      ),
+                      child: Text(
+                        tag,
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
           ],
@@ -757,8 +857,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             children: const [
               Icon(Icons.restaurant_menu, color: Colors.white24, size: 48),
               SizedBox(height: 16),
-              Text('No menu available yet.',
-                  style: TextStyle(color: Colors.white38, fontSize: 16)),
+              Text(
+                'No menu available yet.',
+                style: TextStyle(color: Colors.white38, fontSize: 16),
+              ),
             ],
           ),
         ),
@@ -778,7 +880,33 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           physics: const NeverScrollableScrollPhysics(),
           itemCount: _dishes.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, index) => _buildDishCard(_dishes[index]),
+          itemBuilder: (_, index) {
+            final dish = _dishes[index];
+            return GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DishDetailsPage(
+                    dish: Dish(
+                      id: dish['id'] as String,
+                      restaurantId: _data!.restaurant.id,
+                      name: dish['name'] as String? ?? '',
+                      description: dish['description'] as String?,
+                      price: (dish['price'] as num?)?.toDouble() ?? 0.0,
+                      photoUrl: dish['photo_url'] as String?,
+                      isAvailable: dish['is_available'] as bool? ?? true,
+                      restaurantName: _data!.restaurant.name,
+                      restaurantAddress: _data!.restaurant.address,
+                      restaurantRating: _data!.restaurant.algorithmScore != null
+                          ? _data!.restaurant.algorithmScore! / 20.0
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+              child: _buildDishCard(dish),
+            );
+          },
         ),
       ],
     );
@@ -789,6 +917,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     final description = dish['description'] as String? ?? '';
     final price = (dish['price'] as num?)?.toDouble() ?? 0.0;
     final photoUrl = dish['photo_url'] as String?;
+    final avgRating = (dish['avg_rating'] as num?)?.toDouble();
+    final reviewCount = dish['review_count'] as int? ?? 0;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -805,16 +935,15 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             borderRadius: BorderRadius.circular(10),
             child: photoUrl != null && photoUrl.isNotEmpty
                 ? Image.network(
-              photoUrl,
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildDishPlaceholder(),
-            )
+                    photoUrl,
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildDishPlaceholder(),
+                  )
                 : _buildDishPlaceholder(),
           ),
           const SizedBox(width: 14),
-          // Dish info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -832,30 +961,74 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                   Text(
                     description,
                     style: const TextStyle(
-                        color: Colors.white54, fontSize: 12, height: 1.4),
+                      color: Colors.white54,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
                 const SizedBox(height: 10),
-                // Price tag
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFD700).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: const Color(0xFFFFD700).withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    '৳ ${price.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
+                Row(
+                  children: [
+                    // Price tag
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFD700).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFFFFD700).withOpacity(0.3),
+                        ),
+                      ),
+                      child: Text(
+                        '৳ ${price.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                    // Rating — only show if dish has been reviewed
+                    if (avgRating != null && reviewCount > 0)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star,
+                            color: Color(0xFFFFD700),
+                            size: 13,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            avgRating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '($reviewCount)',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      const Text(
+                        'No ratings yet',
+                        style: TextStyle(color: Colors.white24, fontSize: 11),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -896,14 +1069,17 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           padding: const EdgeInsets.symmetric(vertical: 60),
           child: Column(
             children: const [
-              Icon(Icons.rate_review_outlined,
-                  color: Colors.white24, size: 48),
+              Icon(Icons.rate_review_outlined, color: Colors.white24, size: 48),
               SizedBox(height: 16),
-              Text('No reviews yet.',
-                  style: TextStyle(color: Colors.white38, fontSize: 16)),
+              Text(
+                'No reviews yet.',
+                style: TextStyle(color: Colors.white38, fontSize: 16),
+              ),
               SizedBox(height: 8),
-              Text('Be the first to review this place!',
-                  style: TextStyle(color: Colors.white24, fontSize: 13)),
+              Text(
+                'Be the first to review this place!',
+                style: TextStyle(color: Colors.white24, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -918,17 +1094,19 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             Text(
               '${_reviews.length} Reviews',
               style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             TextButton(
               onPressed: () {
                 if (_data != null) _loadReviews(_data!.restaurant.id);
               },
-              child: const Text('Refresh',
-                  style:
-                  TextStyle(color: Color(0xFFFFD700), fontSize: 13)),
+              child: const Text(
+                'Refresh',
+                style: TextStyle(color: Color(0xFFFFD700), fontSize: 13),
+              ),
             ),
           ],
         ),
@@ -953,10 +1131,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     final rating = (review['rating'] as num?)?.toDouble() ?? 0.0;
     final body = review['body'] as String? ?? '';
     final photos = List<String>.from(review['photos'] ?? []);
-    final dishMentions = List<String>.from(review['dish_mentions'] ?? []);
     final tier = user['tier'] as String? ?? 'explorer';
     final name = user['name'] as String? ?? 'Anonymous';
     final verified = user['verified'] as bool? ?? false;
+    final isOwner = review['user_id'] == _currentUserId;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -972,17 +1150,18 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor:
-                const Color(0xFFFFD700).withOpacity(0.2),
+                backgroundColor: const Color(0xFFFFD700).withOpacity(0.2),
                 backgroundImage: user['profile_photo_url'] != null
-                    ? NetworkImage(
-                    user['profile_photo_url'] as String)
+                    ? NetworkImage(user['profile_photo_url'] as String)
                     : null,
                 child: user['profile_photo_url'] == null
-                    ? Text(name[0].toUpperCase(),
-                    style: const TextStyle(
-                        color: Color(0xFFFFD700),
-                        fontWeight: FontWeight.bold))
+                    ? Text(
+                        name[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
                     : null,
               ),
               const SizedBox(width: 10),
@@ -999,23 +1178,30 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ReviewerProfilePage(userId: userId),
+                                  builder: (_) =>
+                                      ReviewerProfilePage(userId: userId),
                                 ),
                               );
                             }
                           },
-                          child: Text(name,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.white38)),
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              decoration: TextDecoration.underline,
+                              decorationColor: Colors.white38,
+                            ),
+                          ),
                         ),
                         if (verified) ...[
                           const SizedBox(width: 4),
-                          const Icon(Icons.verified,
-                              color: Colors.green, size: 14),
+                          const Icon(
+                            Icons.verified,
+                            color: Colors.green,
+                            size: 14,
+                          ),
                         ],
                       ],
                     ),
@@ -1033,37 +1219,14 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(body,
-              style: const TextStyle(
-                  color: Colors.white70, height: 1.5, fontSize: 14)),
-          
-          if (dishMentions.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: dishMentions.map((dish) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD700).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.restaurant_menu, size: 10, color: Color(0xFFFFD700)),
-                    const SizedBox(width: 4),
-                    Text(
-                      dish,
-                      style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              )).toList(),
+          Text(
+            body,
+            style: const TextStyle(
+              color: Colors.white70,
+              height: 1.5,
+              fontSize: 14,
             ),
-          ],
-
+          ),
           if (photos.isNotEmpty) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -1074,8 +1237,12 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (_, i) => ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(photos[i],
-                      width: 80, height: 80, fit: BoxFit.cover),
+                  child: Image.network(
+                    photos[i],
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
@@ -1083,49 +1250,70 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           const SizedBox(height: 12),
           const Divider(color: Colors.white10),
           const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () => _handleVote(reviewId),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isVoted
-                    ? const Color(0xFFFFD700).withOpacity(0.15)
-                    : Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isVoted
-                      ? const Color(0xFFFFD700).withOpacity(0.5)
-                      : Colors.white12,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isVoted ? Icons.thumb_up : Icons.thumb_up_outlined,
-                    color: isVoted
-                        ? const Color(0xFFFFD700)
-                        : Colors.white38,
-                    size: 16,
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => _handleVote(reviewId),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$helpfulVotes Helpful',
-                    style: TextStyle(
+                  decoration: BoxDecoration(
+                    color: isVoted
+                        ? const Color(0xFFFFD700).withOpacity(0.15)
+                        : Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
                       color: isVoted
-                          ? const Color(0xFFFFD700)
-                          : Colors.white38,
-                      fontSize: 13,
-                      fontWeight: isVoted
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                          ? const Color(0xFFFFD700).withOpacity(0.5)
+                          : Colors.white12,
                     ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isVoted ? Icons.thumb_up : Icons.thumb_up_outlined,
+                        color: isVoted ? const Color(0xFFFFD700) : Colors.white38,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$helpfulVotes Helpful',
+                        style: TextStyle(
+                          color: isVoted ? const Color(0xFFFFD700) : Colors.white38,
+                          fontSize: 13,
+                          fontWeight: isVoted ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              const Spacer(),
+              if (isOwner) ...[
+                IconButton(
+                  tooltip: 'Edit review',
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    color: Color(0xFFFFD700),
+                    size: 18,
+                  ),
+                  onPressed: () => _openReviewForm(editReview: review),
+                ),
+                IconButton(
+                  tooltip: 'Delete review',
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                  onPressed: () => _deleteReview(reviewId),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -1136,9 +1324,8 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   // PHOTOS TAB — from File 2: real community photos grid
   // ─────────────────────────────────────────────
   Widget _buildPhotosTab() {
-    final List<String> allPhotos = _reviews
-        .expand((r) => List<String>.from(r['photos'] ?? []))
-        .toList();
+    final List<String> allPhotos =
+        _reviews.expand((r) => List<String>.from(r['photos'] ?? [])).toList();
 
     if (_loadingReviews) {
       return const Center(
@@ -1153,8 +1340,10 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 60),
-          child: Text('No community photos yet.',
-              style: TextStyle(color: Colors.white38)),
+          child: Text(
+            'No community photos yet.',
+            style: TextStyle(color: Colors.white38),
+          ),
         ),
       );
     }
@@ -1197,9 +1386,14 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withOpacity(0.4)),
       ),
-      child: Text(tier.toUpperCase(),
-          style: TextStyle(
-              color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+      child: Text(
+        tier.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -1229,11 +1423,13 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         if (i < rating.floor()) {
           return Icon(Icons.star, color: const Color(0xFFFFD700), size: size);
         } else if (i < rating) {
-          return Icon(Icons.star_half,
-              color: const Color(0xFFFFD700), size: size);
+          return Icon(
+            Icons.star_half,
+            color: const Color(0xFFFFD700),
+            size: size,
+          );
         } else {
-          return Icon(Icons.star_border,
-              color: Colors.white24, size: size);
+          return Icon(Icons.star_border, color: Colors.white24, size: size);
         }
       }),
     );
@@ -1247,9 +1443,14 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withOpacity(0.5)),
       ),
-      child: Text(text,
-          style: TextStyle(
-              color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -1264,15 +1465,17 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
             value: score / 100,
             strokeWidth: 4,
             backgroundColor: Colors.white10,
-            valueColor:
-            const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
           ),
         ),
-        Text(score.toString(),
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
+        Text(
+          score.toString(),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ],
     );
   }
@@ -1281,10 +1484,11 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     return Text(
       title,
       style: const TextStyle(
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'serif'),
+        color: Colors.white,
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'serif',
+      ),
     );
   }
 }
@@ -1296,10 +1500,11 @@ class _TabItem extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  const _TabItem(
-      {required this.label,
-        this.isSelected = false,
-        required this.onTap});
+  const _TabItem({
+    required this.label,
+    this.isSelected = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1311,9 +1516,7 @@ class _TabItem extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isSelected
-                  ? const Color(0xFFFFD700)
-                  : Colors.white38,
+              color: isSelected ? const Color(0xFFFFD700) : Colors.white38,
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
@@ -1339,12 +1542,14 @@ class _ReviewFormSheet extends StatefulWidget {
   final ReviewApi reviewApi;
   final List<Map<String, dynamic>> availableDishes;
   final VoidCallback onSubmitted;
+  final Map<String, dynamic>? editReview;
 
   const _ReviewFormSheet({
     required this.restaurantId,
     required this.reviewApi,
     required this.availableDishes,
     required this.onSubmitted,
+    this.editReview,
   });
 
   @override
@@ -1359,8 +1564,32 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   String _selectedMood = '';
   double _selectedRating = 0;
   List<XFile> _selectedPhotos = [];
+  List<String> _existingPhotos = [];
   final Set<String> _selectedDishes = {};
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final review = widget.editReview;
+    if (review == null) return;
+
+    _bodyController.text = review['body'] as String? ?? '';
+    _selectedMood = review['mood_tag'] as String? ?? '';
+    _selectedRating = (review['rating'] as num?)?.toDouble() ?? 0;
+    _existingPhotos = List<String>.from(review['photos'] ?? []);
+
+    final dishMentions = List<String>.from(review['dish_mentions'] ?? []);
+    _selectedDishes.addAll(dishMentions);
+    final knownDishNames = widget.availableDishes
+        .map((dish) => dish['name'] as String? ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet();
+    final manualDishes =
+        dishMentions.where((dish) => !knownDishNames.contains(dish)).toList();
+    _dishController.text = manualDishes.join(', ');
+  }
 
   Future<void> _pickPhotos() async {
     final picked = await _picker.pickMultiImage(imageQuality: 80);
@@ -1379,9 +1608,7 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
       await supabase.storage
           .from('review-photos')
           .uploadBinary(fileName, bytes);
-      final url = supabase.storage
-          .from('review-photos')
-          .getPublicUrl(fileName);
+      final url = supabase.storage.from('review-photos').getPublicUrl(fileName);
       urls.add(url);
     }
     return urls;
@@ -1390,42 +1617,49 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   Future<void> _submitReview() async {
     if (_selectedMood.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a mood tag.')));
+        const SnackBar(content: Text('Please select a mood tag.')),
+      );
       return;
     }
     if (_selectedRating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a star rating.')));
+        const SnackBar(content: Text('Please select a star rating.')),
+      );
       return;
     }
-    if (_selectedPhotos.isEmpty) {
+    if (_selectedPhotos.isEmpty && _existingPhotos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('At least 1 photo is required.')));
+        const SnackBar(content: Text('At least 1 photo is required.')),
+      );
       return;
     }
     if (_bodyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please write your review.')));
+        const SnackBar(content: Text('Please write your review.')),
+      );
       return;
     }
     if (_dishController.text.trim().isEmpty && _selectedDishes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please mention at least one dish you tried.')));
+        const SnackBar(
+          content: Text('Please mention at least one dish you tried.'),
+        ),
+      );
       return;
     }
 
     setState(() => _submitting = true);
     try {
       final photoUrls = await _uploadPhotos();
-      
+      final allPhotoUrls = [..._existingPhotos, ...photoUrls];
+
       final Set<String> allDishes = Set.from(_selectedDishes);
       if (_dishController.text.trim().isNotEmpty) {
         allDishes.addAll(
           _dishController.text
               .split(',')
               .map((d) => d.trim())
-              .where((d) => d.isNotEmpty)
+              .where((d) => d.isNotEmpty),
         );
       }
 
@@ -1433,24 +1667,34 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
         restaurantId: widget.restaurantId,
         moodTag: _selectedMood,
         rating: _selectedRating,
-        photoUrls: photoUrls,
+        photoUrls: allPhotoUrls,
         body: _bodyController.text.trim(),
         dishMentions: allDishes.toList(),
       );
+
+      if (widget.editReview != null) {
+        await widget.reviewApi.deleteReview(widget.editReview!['id'] as String);
+      }
 
       if (mounted) {
         Navigator.pop(context);
         widget.onSubmitted();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Review submitted successfully!'),
-              backgroundColor: Color(0xFFFFD700)),
+          SnackBar(
+            content: Text(
+              widget.editReview != null
+                  ? 'Review updated!'
+                  : 'Review submitted successfully!',
+            ),
+            backgroundColor: const Color(0xFFFFD700),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to submit: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to submit: $e')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -1460,8 +1704,9 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding:
-      EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -1469,74 +1714,85 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(
-                child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2)))),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
-            const Text('Write a Review',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold)),
+            Text(
+              widget.editReview != null ? 'Edit Review' : 'Write a Review',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 24),
-            const Text('How was it?',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
+            const Text(
+              'How was it?',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
                 _MoodButton(
-                    emoji: '❤️',
-                    label: 'Loved it',
-                    value: 'loved_it',
-                    selected: _selectedMood == 'loved_it',
-                    onTap: () =>
-                        setState(() => _selectedMood = 'loved_it')),
+                  emoji: '❤️',
+                  label: 'Loved it',
+                  value: 'loved_it',
+                  selected: _selectedMood == 'loved_it',
+                  onTap: () => setState(() => _selectedMood = 'loved_it'),
+                ),
                 const SizedBox(width: 10),
                 _MoodButton(
-                    emoji: '👍',
-                    label: 'Good',
-                    value: 'good',
-                    selected: _selectedMood == 'good',
-                    onTap: () => setState(() => _selectedMood = 'good')),
+                  emoji: '👍',
+                  label: 'Good',
+                  value: 'good',
+                  selected: _selectedMood == 'good',
+                  onTap: () => setState(() => _selectedMood = 'good'),
+                ),
                 const SizedBox(width: 10),
                 _MoodButton(
-                    emoji: '😐',
-                    label: 'Average',
-                    value: 'average',
-                    selected: _selectedMood == 'average',
-                    onTap: () =>
-                        setState(() => _selectedMood = 'average')),
+                  emoji: '😐',
+                  label: 'Average',
+                  value: 'average',
+                  selected: _selectedMood == 'average',
+                  onTap: () => setState(() => _selectedMood = 'average'),
+                ),
               ],
             ),
             const SizedBox(height: 24),
-            const Text('Star Rating',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
+            const Text(
+              'Star Rating',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 12),
             Row(
               children: List.generate(5, (i) {
                 final starValue = (i + 1).toDouble();
                 return GestureDetector(
-                  onTap: () =>
-                      setState(() => _selectedRating = starValue),
+                  onTap: () => setState(() => _selectedRating = starValue),
                   child: Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: Icon(
-                        i < _selectedRating
-                            ? Icons.star
-                            : Icons.star_border,
-                        color: i < _selectedRating
-                            ? const Color(0xFFFFD700)
-                            : Colors.white24,
-                        size: 36),
+                      i < _selectedRating ? Icons.star : Icons.star_border,
+                      color: i < _selectedRating
+                          ? const Color(0xFFFFD700)
+                          : Colors.white24,
+                      size: 36,
+                    ),
                   ),
                 );
               }),
@@ -1545,100 +1801,168 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Photos (min 1)',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600)),
+                const Text(
+                  'Photos (min 1)',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 TextButton.icon(
                   onPressed: _pickPhotos,
-                  icon: const Icon(Icons.add_photo_alternate_outlined,
-                      color: Color(0xFFFFD700), size: 18),
-                  label: const Text('Add Photos',
-                      style: TextStyle(
-                          color: Color(0xFFFFD700), fontSize: 13)),
+                  icon: const Icon(
+                    Icons.add_photo_alternate_outlined,
+                    color: Color(0xFFFFD700),
+                    size: 18,
+                  ),
+                  label: const Text(
+                    'Add Photos',
+                    style: TextStyle(color: Color(0xFFFFD700), fontSize: 13),
+                  ),
                 ),
               ],
             ),
-            if (_selectedPhotos.isNotEmpty) ...[
+            if (_existingPhotos.isNotEmpty || _selectedPhotos.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
                 height: 80,
-                child: ListView.separated(
+                child: ListView(
                   scrollDirection: Axis.horizontal,
-                  itemCount: _selectedPhotos.length,
-                  separatorBuilder: (_, __) =>
-                  const SizedBox(width: 8),
-                  itemBuilder: (_, i) => Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: kIsWeb
-                            ? Image.network(_selectedPhotos[i].path,
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover)
-                            : Image.file(
-                            File(_selectedPhotos[i].path),
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover),
-                      ),
-                      Positioned(
-                        top: 2,
-                        right: 2,
-                        child: GestureDetector(
-                          onTap: () => setState(
-                                  () => _selectedPhotos.removeAt(i)),
-                          child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle),
-                              child: const Icon(Icons.close,
-                                  color: Colors.white, size: 12)),
+                  children: [
+                    ..._existingPhotos.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final url = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                url,
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _existingPhotos.removeAt(i)),
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
+                      );
+                    }),
+                    ..._selectedPhotos.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final photo = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: kIsWeb
+                                  ? Image.network(
+                                      photo.path,
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.file(
+                                      File(photo.path),
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _selectedPhotos.removeAt(i)),
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               ),
             ],
             const SizedBox(height: 24),
-            const Text('Your Review',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
+            const Text(
+              'Your Review',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: _bodyController,
               maxLines: 4,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText:
-                'What did you think? Mention dishes, atmosphere...',
+                hintText: 'What did you think? Mention dishes, atmosphere...',
                 hintStyle: const TextStyle(color: Colors.white24),
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.05),
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white10)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
                 enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white10)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
                 focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                    const BorderSide(color: Color(0xFFFFD700))),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFFFD700)),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Dishes Mentioned (required)',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
+            const Text(
+              'Dishes Mentioned (required)',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             if (widget.availableDishes.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -1658,7 +1982,10 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFFFFD700).withOpacity(0.15)
@@ -1673,9 +2000,8 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                       child: Text(
                         name,
                         style: TextStyle(
-                          color: isSelected
-                              ? const Color(0xFFFFD700)
-                              : Colors.white70,
+                          color:
+                              isSelected ? const Color(0xFFFFD700) : Colors.white70,
                           fontSize: 12,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
@@ -1690,21 +2016,22 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
               controller: _dishController,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText:
-                'Add other dishes manually...',
+                hintText: 'Add other dishes manually...',
                 hintStyle: const TextStyle(color: Colors.white24),
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.05),
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white10)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
                 enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white10)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white10),
+                ),
                 focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                    const BorderSide(color: Color(0xFFFFD700))),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFFFD700)),
+                ),
               ),
             ),
             const SizedBox(height: 28),
@@ -1716,20 +2043,30 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                   backgroundColor: const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
                   disabledBackgroundColor:
-                  const Color(0xFFFFD700).withOpacity(0.4),
+                      const Color(0xFFFFD700).withOpacity(0.4),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 child: _submitting
                     ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.black))
-                    : const Text('Submit Review',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black,
+                        ),
+                      )
+                    : Text(
+                        widget.editReview != null
+                            ? 'Update Review'
+                            : 'Submit Review',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 16),
@@ -1739,6 +2076,9 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
     );
   }
 
+  // ═══════════════════════════════════════════════
+  // MOOD BUTTON
+  // ═══════════════════════════════════════════════
   @override
   void dispose() {
     _bodyController.dispose();
@@ -1747,9 +2087,6 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
   }
 }
 
-// ═══════════════════════════════════════════════
-// MOOD BUTTON
-// ═══════════════════════════════════════════════
 class _MoodButton extends StatelessWidget {
   final String emoji;
   final String label;
@@ -1779,10 +2116,9 @@ class _MoodButton extends StatelessWidget {
                 : Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: selected
-                    ? const Color(0xFFFFD700)
-                    : Colors.white12,
-                width: selected ? 1.5 : 1),
+              color: selected ? const Color(0xFFFFD700) : Colors.white12,
+              width: selected ? 1.5 : 1,
+            ),
           ),
           child: Column(
             children: [
@@ -1791,13 +2127,9 @@ class _MoodButton extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: selected
-                      ? const Color(0xFFFFD700)
-                      : Colors.white38,
+                  color: selected ? const Color(0xFFFFD700) : Colors.white38,
                   fontSize: 11,
-                  fontWeight: selected
-                      ? FontWeight.bold
-                      : FontWeight.normal,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
             ],
