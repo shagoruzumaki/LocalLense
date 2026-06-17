@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../constant.dart'; // Updated to use your main constant file
+import '../utils/app_constants.dart'; // Updated import
 import 'package:http/http.dart' as http;
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// 2.3 AI Summary Engine
@@ -23,78 +24,68 @@ class AiSummaryApi {
   // ─────────────────────────────────────────────
   // MAIN: Check if summary should be generated
   // Called from review_api.dart after every submitReview()
+  // Triggers at 5 reviews (first time) and every 10 after
   // ─────────────────────────────────────────────
   Future<void> checkAndGenerateSummary(String restaurantId) async {
-    try {
-      // Count total reviews for this restaurant
-      final countResponse = await _supabase
-          .from('reviews')
-          .select('id')
-          .eq('restaurant_id', restaurantId)
-          .eq('flagged', false);
+    // Count total reviews for this restaurant
+    final countResponse = await _supabase
+        .from('reviews')
+        .select('id')
+        .eq('restaurant_id', restaurantId)
+        .eq('flagged', false);
 
-      final reviewCount = (countResponse as List<dynamic>).length;
-      debugPrint('[AiSummaryApi] Review count for $restaurantId: $reviewCount');
+    final reviewCount = (countResponse as List<dynamic>).length;
 
-      // Check if a summary already exists
-      final restaurant = await _supabase
-          .from('restaurants')
-          .select('ai_summary')
-          .eq('id', restaurantId)
-          .single();
-      
-      final bool hasNoSummary = restaurant['ai_summary'] == null;
+    // Trigger logic:
+    // First time: exactly 5 reviews
+    // After that: every 10 new reviews (15, 25, 35, 45...)
+    final bool shouldGenerate =
+        reviewCount == 5 || (reviewCount > 5 && (reviewCount - 5) % 10 == 0);
 
-      // Trigger logic:
-      // 1. If 5+ reviews exist and there is NO summary yet
-      // 2. Milestone triggers: 15, 25, 35, 45...
-      final bool shouldGenerate = (hasNoSummary && reviewCount >= 5) || 
-                                  (reviewCount > 5 && (reviewCount - 5) % 10 == 0);
-
-      if (shouldGenerate) {
-        debugPrint('[AiSummaryApi] Triggering summary generation (Count: $reviewCount, Initial: $hasNoSummary)');
-        await generateAndSaveSummary(restaurantId);
-      } else {
-        debugPrint('[AiSummaryApi] Conditions not met for generation.');
-      }
-    } catch (e) {
-      debugPrint('[AiSummaryApi] Error in checkAndGenerateSummary: $e');
+    if (shouldGenerate) {
+      await generateAndSaveSummary(restaurantId);
     }
   }
 
   // ─────────────────────────────────────────────
   // CORE: Generate summary and save to Supabase
+  // Also callable directly for admin override:
+  // POST /admin/restaurants/:id/regenerate-summary
   // ─────────────────────────────────────────────
   Future<void> generateAndSaveSummary(String restaurantId) async {
+    // Step 1: Fetch latest 50 non-flagged review bodies
     final reviews = await _fetchLatestReviews(restaurantId);
 
+    // Need at least 5 reviews to generate a meaningful summary
     if (reviews.length < 5) {
-      debugPrint('[AiSummaryApi] Aborting: Need at least 5 reviews (current: ${reviews.length})');
-      return; 
+      return; // Do nothing — frontend shows null
     }
 
+    // Step 2: Call Gemini 1.5 Flash
     final geminiResponse = await _callGemini(reviews);
 
     if (geminiResponse == null) {
-      debugPrint('[AiSummaryApi] Gemini returned null or failed.');
-      return; 
+      return; // Gemini call failed — keep existing summary
     }
 
+    // Step 3: Parse Gemini response into summary + tags
     final parsed = _parseGeminiResponse(geminiResponse);
 
     if (parsed == null) {
-      debugPrint('[AiSummaryApi] Failed to parse Gemini response.');
-      return;
+      return; // Parsing failed — keep existing summary
     }
 
+    // Step 4: Save to Supabase restaurants table
     await _saveSummary(
       restaurantId: restaurantId,
       summary: parsed['summary']!,
       tags: parsed['tags'] as List<String>,
     );
-    debugPrint('[AiSummaryApi] Summary successfully updated for $restaurantId');
   }
 
+  // ─────────────────────────────────────────────
+  // STEP 1: Fetch latest 50 review bodies
+  // ─────────────────────────────────────────────
   Future<List<String>> _fetchLatestReviews(String restaurantId) async {
     final response = await _supabase
         .from('reviews')
@@ -110,12 +101,16 @@ class AiSummaryApi {
         .toList();
   }
 
+  // ─────────────────────────────────────────────
+  // STEP 2: Call Gemini 1.5 Flash API
+  // ─────────────────────────────────────────────
   Future<String?> _callGemini(List<String> reviewBodies) async {
     if (_geminiApiKey.isEmpty || _geminiApiKey == 'YOUR_GEMINI_API_KEY') {
-      debugPrint('[AiSummaryApi] ERROR: Gemini API key is not configured in AppConstants.');
+      debugPrint('[AiSummaryApi] Gemini API key not configured.');
       return null;
     }
 
+    // Build the prompt — same structure as the backend doc specifies
     final reviewText = reviewBodies
         .asMap()
         .entries
@@ -123,14 +118,19 @@ class AiSummaryApi {
         .join('\n');
 
     final prompt = '''
-Summarize these restaurant reviews in 2-3 sentences.
-Then provide exactly 3 short keyword tags.
+You are summarising customer reviews for a restaurant discovery app.
 
-Reviews:
+Here are the reviews:
 $reviewText
 
-Format:
-SUMMARY: [text]
+Task: Summarise what reviewers most commonly say about this restaurant in 2-3 sentences. Then list exactly 3 keyword tags separated by commas.
+
+Rules:
+- Summary must be 2-3 sentences only
+- Tags must be exactly 3, separated by commas
+- No extra text, no bullet points, no numbering
+- Format your response EXACTLY like this:
+SUMMARY: [your 2-3 sentence summary here]
 TAGS: [tag1, tag2, tag3]
 ''';
 
@@ -143,8 +143,8 @@ TAGS: [tag1, tag2, tag3]
         }
       ],
       'generationConfig': {
-        'temperature': 0.4,
-        'maxOutputTokens': 300,
+        'temperature': 0.3, // low temp = consistent, factual output
+        'maxOutputTokens': 200,
       }
     };
 
@@ -157,56 +157,70 @@ TAGS: [tag1, tag2, tag3]
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        // Extract text from Gemini response structure
         return data['candidates'][0]['content']['parts'][0]['text'] as String;
+      } else if (response.statusCode == 429) {
+        // Rate limit hit — Gemini free tier allows 15 requests/min
+        throw Exception('Gemini rate limit reached. Try again in a minute.');
       } else {
-        debugPrint('[AiSummaryApi] Gemini API Error (${response.statusCode}): ${response.body}');
-        return null;
+        throw Exception('Gemini API error: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      debugPrint('[AiSummaryApi] Network Error: $e');
+      // Log error but don't crash the app — summary generation is non-critical
+      debugPrint('[AiSummaryApi] Gemini call failed: $e');
       return null;
     }
   }
 
+  // ─────────────────────────────────────────────
+  // STEP 3: Parse Gemini response
+  // Extracts summary text and tags array
+  // ─────────────────────────────────────────────
   Map<String, dynamic>? _parseGeminiResponse(String rawResponse) {
     try {
-      debugPrint('[AiSummaryApi] Raw Response: $rawResponse');
-      
-      final clean = rawResponse.replaceAll('**', '').trim();
-      final lines = clean.split('\n');
+      // Expected format:
+      // SUMMARY: Reviewers love the smoked hilsa here...
+      // TAGS: Smoked Fish, Intimate Ambience, Weekend Special
+
+      final lines = rawResponse.trim().split('\n');
 
       String summary = '';
       List<String> tags = [];
 
-      for (var line in lines) {
-        final trimmedLine = line.trim();
-        final upperLine = trimmedLine.toUpperCase();
-        
-        if (upperLine.startsWith('SUMMARY:')) {
-          summary = trimmedLine.substring(trimmedLine.indexOf(':') + 1).trim();
-        } else if (upperLine.startsWith('TAGS:')) {
-          final tagsPart = trimmedLine.substring(trimmedLine.indexOf(':') + 1).trim();
-          final cleanTags = tagsPart.replaceAll('[', '').replaceAll(']', '');
-          tags = cleanTags
+      for (final line in lines) {
+        if (line.startsWith('SUMMARY:')) {
+          summary = line.replaceFirst('SUMMARY:', '').trim();
+        } else if (line.startsWith('TAGS:')) {
+          final tagsRaw = line.replaceFirst('TAGS:', '').trim();
+          tags = tagsRaw
               .split(',')
               .map((t) => t.trim())
               .where((t) => t.isNotEmpty)
+              .take(3) // ensure max 3 tags
               .toList();
         }
       }
 
-      if (summary.isEmpty || tags.isEmpty) return null;
+      // Validate we got both parts
+      if (summary.isEmpty || tags.length < 3) {
+        debugPrint('[AiSummaryApi] Parsing failed — unexpected format: $rawResponse');
+        return null;
+      }
 
       return {
         'summary': summary,
-        'tags': tags.take(3).toList(),
+        'tags': tags,
       };
     } catch (e) {
-      debugPrint('[AiSummaryApi] Parse Error: $e');
+      debugPrint('[AiSummaryApi] Parse error: $e');
       return null;
     }
   }
 
+  // ─────────────────────────────────────────────
+  // STEP 4: Save summary and tags to Supabase
+  // Updates restaurants.ai_summary and restaurants.ai_tags
+  // ─────────────────────────────────────────────
   Future<void> _saveSummary({
     required String restaurantId,
     required String summary,
@@ -218,6 +232,12 @@ TAGS: [tag1, tag2, tag3]
     }).eq('id', restaurantId);
   }
 
+  // ─────────────────────────────────────────────
+  // READ: Get existing summary for a restaurant
+  // Returns null if fewer than 5 reviews exist
+  // This is the same as review_api.dart getRestaurantAiSummary()
+  // but kept here for direct access if needed
+  // ─────────────────────────────────────────────
   Future<Map<String, dynamic>?> getSummary(String restaurantId) async {
     final response = await _supabase
         .from('restaurants')
@@ -225,7 +245,9 @@ TAGS: [tag1, tag2, tag3]
         .eq('id', restaurantId)
         .single();
 
-    if (response['ai_summary'] == null) return null;
+    if (response['ai_summary'] == null) {
+      return null; // fewer than 5 reviews — show nothing on frontend
+    }
 
     return {
       'ai_summary': response['ai_summary'] as String,

@@ -7,7 +7,7 @@ class Dish {
   final String? photoUrl;
   final bool isAvailable;
   final String? category;
-  
+
   // Joined data
   final String? restaurantName;
   final double? restaurantRating;
@@ -16,6 +16,10 @@ class Dish {
   // Trending Metrics
   final double trendingScore;
   final int mentionCount;
+
+  // Rating Metrics
+  final double? avgRating;
+  final int reviewCount;
 
   Dish({
     required this.id,
@@ -31,18 +35,20 @@ class Dish {
     this.restaurantAddress,
     this.trendingScore = 0.0,
     this.mentionCount = 0,
+    this.avgRating,
+    this.reviewCount = 0,
   });
 
   factory Dish.fromSupabase(Map<String, dynamic> json) {
     var resData = json['restaurants'] ?? json['restaurant'];
     Map<String, dynamic>? restaurant;
-    
+
     if (resData is Map) {
       restaurant = Map<String, dynamic>.from(resData);
     } else if (resData is List && resData.isNotEmpty) {
       restaurant = Map<String, dynamic>.from(resData.first);
     }
-    
+
     return Dish(
       id: json['id']?.toString() ?? '',
       restaurantId: json['restaurant_id']?.toString() ?? '',
@@ -53,18 +59,25 @@ class Dish {
       isAvailable: json['is_available'] ?? true,
       category: json['category'],
       restaurantName: restaurant?['name'],
-      restaurantRating: restaurant != null 
-          ? (restaurant['algorithm_score'] != null 
-              ? (restaurant['algorithm_score'] as num).toDouble() / 20.0 
-              : (restaurant['rating'] as num?)?.toDouble())
+      restaurantRating: restaurant != null
+          ? (restaurant['algorithm_score'] != null
+          ? (restaurant['algorithm_score'] as num).toDouble() / 20.0
+          : (restaurant['rating'] as num?)?.toDouble())
           : null,
       restaurantAddress: restaurant?['address'],
       trendingScore: (json['trending_score'] as num?)?.toDouble() ?? 0.0,
       mentionCount: json['mention_count'] ?? 0,
+      avgRating: (json['avg_rating'] as num?)?.toDouble(),
+      reviewCount: json['review_count'] as int? ?? 0,
     );
   }
 
-  Dish copyWith({double? trendingScore, int? mentionCount}) {
+  Dish copyWith({
+    double? trendingScore,
+    int? mentionCount,
+    double? avgRating,
+    int? reviewCount,
+  }) {
     return Dish(
       id: id,
       restaurantId: restaurantId,
@@ -79,6 +92,8 @@ class Dish {
       restaurantAddress: restaurantAddress,
       trendingScore: trendingScore ?? this.trendingScore,
       mentionCount: mentionCount ?? this.mentionCount,
+      avgRating: avgRating ?? this.avgRating,
+      reviewCount: reviewCount ?? this.reviewCount,
     );
   }
 
