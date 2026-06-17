@@ -18,7 +18,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
   final RestaurantService _restaurantService = RestaurantService();
   late TabController _tabController;
   
-  String _timeFilter = 'alltime'; 
+  String _timeFilter = 'week'; // Default to week for dynamic feel
   List<Restaurant> _restaurants = [];
   List<Map<String, dynamic>> _critics = [];
   bool _isLoading = true;
@@ -35,38 +35,35 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      if (_timeFilter != 'alltime') {
-        try {
-          final hasPermission = await _locationService.checkPermission();
-          if (hasPermission) {
-            final pos = await _locationService.getCurrentLocation();
-            final name = await _restaurantService.getNeighbourhoodName(pos.latitude, pos.longitude);
-            if (mounted) setState(() => _locationName = name);
-          }
-        } catch (_) {
-          if (mounted) setState(() => _locationName = 'Global');
+      String currentNeighbourhood = 'Global';
+      try {
+        final hasPermission = await _locationService.checkPermission();
+        if (hasPermission) {
+          final pos = await _locationService.getCurrentLocation();
+          currentNeighbourhood = await _restaurantService.getNeighbourhoodName(pos.latitude, pos.longitude);
         }
-        
-        final res = await _top10Service.getTopRestaurantsByPeriod(filter: _timeFilter);
-        final criticsData = await _top10Service.getTopCritics(filter: _timeFilter);
-        if (mounted) {
-          setState(() {
-            _restaurants = res;
-            _critics = criticsData;
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted) setState(() => _locationName = 'Global');
-        final res = await _top10Service.getAllTimeLeaderboard();
-        final criticsData = await _top10Service.getTopCritics(filter: 'alltime');
-        if (mounted) {
-          setState(() {
-            _restaurants = res;
-            _critics = criticsData;
-            _isLoading = false;
-          });
-        }
+      } catch (_) {
+        currentNeighbourhood = 'Global';
+      }
+
+      if (mounted) setState(() => _locationName = currentNeighbourhood);
+
+      final res = await _top10Service.getTopRestaurantsByPeriod(
+        filter: _timeFilter, 
+        neighbourhood: currentNeighbourhood == 'Global' ? null : currentNeighbourhood
+      );
+      
+      final criticsData = await _top10Service.getTopCritics(
+        filter: _timeFilter,
+        neighbourhood: currentNeighbourhood == 'Global' ? null : currentNeighbourhood
+      );
+
+      if (mounted) {
+        setState(() {
+          _restaurants = res;
+          _critics = criticsData;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -191,7 +188,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
               name: r.name,
               location: r.address,
               score: r.rating.toStringAsFixed(1),
-              description: r.aiSummary ?? "Highly rated global culinary experience...",
+              description: r.aiSummary ?? "Highly rated culinary experience...",
               imageUrl: r.imageUrl,
               onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
             ),

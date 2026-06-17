@@ -49,9 +49,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         setState(() {});
       }
     });
-    _top10RestaurantsFuture = _top10Service.getTopRestaurantsByPeriod(filter: 'alltime');
-    _top10CriticsFuture = _top10Service.getTopCritics(filter: 'alltime');
-    _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: 23.8103, lng: 90.4125, radiusKm: 10);
+    
+    // Initial placeholders
+    _top10RestaurantsFuture = Future.value([]);
+    _top10CriticsFuture = Future.value([]);
+    _nearbyRestaurantsFuture = Future.value([]);
+    
     _loadData();
     _fetchUserPhoto();
   }
@@ -78,8 +81,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _loadData() async {
-    double lat = 23.8103; 
+    double lat = 23.8103; // Default Dhaka
     double lng = 90.4125;
+    String currentNeighbourhood = 'Global';
+
     try {
       final hasPermission = await _locationService.checkPermission();
       if (hasPermission) {
@@ -88,16 +93,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         lng = pos.longitude;
         _userLat = lat;
         _userLng = lng;
-        final name = await _restaurantService.getNeighbourhoodName(lat, lng);
-        if (mounted) setState(() => _neighbourhood = name);
+        currentNeighbourhood = await _restaurantService.getNeighbourhoodName(lat, lng);
       }
-    } catch (_) {}
+    } catch (_) {
+      currentNeighbourhood = 'Global';
+    }
 
     if (mounted) {
       setState(() {
+        _neighbourhood = currentNeighbourhood;
         _nearbyRestaurantsFuture = _discoveryService.getNearby(lat: lat, lng: lng, radiusKm: 10);
-        _top10RestaurantsFuture = _top10Service.getTopRestaurantsByPeriod(filter: 'alltime');
-        _top10CriticsFuture = _top10Service.getTopCritics(filter: 'alltime');
+        // Use 'week' for Home Page to make it dynamic/trending
+        _top10RestaurantsFuture = _top10Service.getTopRestaurantsByPeriod(
+          filter: 'week', 
+          neighbourhood: currentNeighbourhood
+        );
+        _top10CriticsFuture = _top10Service.getTopCritics(
+          filter: 'week',
+          neighbourhood: currentNeighbourhood
+        );
       });
     }
   }
@@ -121,7 +135,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         lat: _userLat, 
         lng: _userLng, 
         sortBy: _currentSort,
-        searchByDish: false, // Don't show restaurant cards for dish matches
+        searchByDish: false, 
       );
       final dishes = await _discoveryService.searchDishes(query);
       if (mounted) {
@@ -200,9 +214,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   const SizedBox(height: 10),
                   TabBar(
                     controller: _searchTabController,
-                    indicatorColor: const Color(0xFFD70F64),
+                    indicatorColor: const Color(0xFFFFD700),
                     indicatorWeight: 3,
-                    labelColor: const Color(0xFFD70F64),
+                    labelColor: const Color(0xFFFFD700),
                     unselectedLabelColor: Colors.white38,
                     labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     tabs: const [
@@ -322,7 +336,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('🏆', 'Top Ranked', 'Best of all time in $_neighbourhood'),
+        _buildSectionHeader('🏆', 'Trending This Week', 'Best spots in $_neighbourhood right now'),
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -364,7 +378,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 20),
-        _buildSectionHeader('💎', 'Elite Critics', 'Most helpful reviewers'),
+        _buildSectionHeader('💎', 'Elite Critics', 'Most active reviewers in $_neighbourhood'),
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -392,7 +406,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         rank: '#${idx + 1}',
                         name: c['name'] ?? 'Critic',
                         tier: (c['tier'] ?? 'EXPLORER').toString().toUpperCase(),
-                        points: '${c['rank_score'] ?? 0} Pts',
+                        points: '${c['helpful_votes'] ?? 0} Pts',
                         photoUrl: c['profile_photo_url'],
                         isLast: idx == displayCritics.length - 1,
                       );
@@ -606,14 +620,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     children: [
                       Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
                       const SizedBox(width: 4),
-                      Text('• ${dish.category ?? 'Main'}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
+                      Text('• ${dish.category ?? 'Main'}', style: TextStyle(color: Colors.white38, fontSize: 12)),
                       const Spacer(),
                       const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
                       const SizedBox(width: 4),
                       Text(
                         dish.restaurantRating?.toStringAsFixed(1) ?? '4.0',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],
