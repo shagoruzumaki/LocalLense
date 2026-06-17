@@ -23,9 +23,12 @@ class _DishDetailsPageState extends State<DishDetailsPage> {
 
   Future<void> _fetchDishReviews() async {
     try {
+      // FIX: Added .eq('restaurant_id', widget.dish.restaurantId) 
+      // This prevents reviews from other restaurants with the same dish name from appearing here.
       final response = await _supabase
           .from('reviews')
           .select('*, users(name, profile_photo_url)')
+          .eq('restaurant_id', widget.dish.restaurantId)
           .contains('dish_mentions', [widget.dish.name])
           .order('created_at', ascending: false);
 
@@ -103,7 +106,7 @@ class _DishDetailsPageState extends State<DishDetailsPage> {
                       Text(
                         'Tk ${widget.dish.price.toStringAsFixed(0)}',
                         style: const TextStyle(
-                          color: Color(0xFFD70F64),
+                          color: Color(0xFFFFD700),
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
@@ -122,12 +125,12 @@ class _DishDetailsPageState extends State<DishDetailsPage> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.restaurant, size: 16, color: Color(0xFFD70F64)),
+                                  const Icon(Icons.restaurant, size: 16, color: Color(0xFFFFD700)),
                                   const SizedBox(width: 6),
                                   Text(
                                     widget.dish.restaurantName ?? 'Restaurant',
                                     style: const TextStyle(
-                                      color: Color(0xFFD70F64),
+                                      color: Color(0xFFFFD700),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -184,7 +187,7 @@ class _DishDetailsPageState extends State<DishDetailsPage> {
                   const Text(
                     'Description',
                     style: TextStyle(
-                      color: Color(0xFFE5D8B0),
+                      color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'serif',
@@ -203,7 +206,7 @@ class _DishDetailsPageState extends State<DishDetailsPage> {
                   const Text(
                     'Reviews',
                     style: TextStyle(
-                      color: Color(0xFFE5D8B0),
+                      color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'serif',
