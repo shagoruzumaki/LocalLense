@@ -953,6 +953,7 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     final rating = (review['rating'] as num?)?.toDouble() ?? 0.0;
     final body = review['body'] as String? ?? '';
     final photos = List<String>.from(review['photos'] ?? []);
+    final dishMentions = List<String>.from(review['dish_mentions'] ?? []);
     final tier = user['tier'] as String? ?? 'explorer';
     final name = user['name'] as String? ?? 'Anonymous';
     final verified = user['verified'] as bool? ?? false;
@@ -1035,6 +1036,34 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
           Text(body,
               style: const TextStyle(
                   color: Colors.white70, height: 1.5, fontSize: 14)),
+          
+          if (dishMentions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: dishMentions.map((dish) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD700).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.restaurant_menu, size: 10, color: Color(0xFFFFD700)),
+                    const SizedBox(width: 4),
+                    Text(
+                      dish,
+                      style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              )).toList(),
+            ),
+          ],
+
           if (photos.isNotEmpty) ...[
             const SizedBox(height: 12),
             SizedBox(
