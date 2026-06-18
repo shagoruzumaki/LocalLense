@@ -584,6 +584,7 @@ class DiscoveryRepository {
     String query, {
     double? userLat,
     double? userLng,
+    SortOption sortBy = SortOption.score,
     int limit = 20,
   }) async {
     final q = query.trim();
@@ -625,22 +626,21 @@ class DiscoveryRepository {
           .toList();
 
       // Filter by 50km radius if location is provided
+      List<Dish> filteredDishes = dishes;
       if (userLat != null && userLng != null) {
-        return dishes
-            .where((d) {
-              final dist = LocationUtils.calculateDistance(
-                userLat,
-                userLng,
-                d.restaurantLatitude ?? 0,
-                d.restaurantLongitude ?? 0,
-              );
-              return dist <= 50.0;
-            })
-            .take(limit)
-            .toList();
+        filteredDishes = dishes.where((d) {
+          final dist = LocationUtils.calculateDistance(
+            userLat,
+            userLng,
+            d.restaurantLatitude ?? 0,
+            d.restaurantLongitude ?? 0,
+          );
+          return dist <= 50.0;
+        }).toList();
       }
 
-      return dishes.take(limit).toList();
+      _sortDishResults(filteredDishes, sortBy, userLat, userLng);
+      return filteredDishes.take(limit).toList();
     } catch (e) {
       return [];
     }
@@ -798,5 +798,57 @@ class DiscoveryRepository {
     );
     if (scoreCompare != 0) return scoreCompare;
     return a.restaurant.name.compareTo(b.restaurant.name);
+  }
+
+  void _sortDishResults(
+    List<Dish> dishes,
+    SortOption sortBy,
+    double? userLat,
+    double? userLng,
+  ) {
+    switch (sortBy) {
+      case SortOption.nearest:
+        dishes.sort((a, b) {
+          final distanceCompare = _dishDistance(
+            a,
+            userLat,
+            userLng,
+          ).compareTo(_dishDistance(b, userLat, userLng));
+          if (distanceCompare != 0) return distanceCompare;
+          return _compareByBestDishScore(a, b);
+        });
+        break;
+      case SortOption.budget:
+        dishes.sort((a, b) {
+          final priceCompare = a.price.compareTo(b.price);
+          if (priceCompare != 0) return priceCompare;
+          return _compareByBestDishScore(a, b);
+        });
+        break;
+      case SortOption.score:
+      case SortOption.popular:
+        dishes.sort(_compareByBestDishScore);
+        break;
+    }
+  }
+
+  int _compareByBestDishScore(Dish a, Dish b) {
+    final ratingCompare = (b.avgRating ?? 0.0).compareTo(a.avgRating ?? 0.0);
+    if (ratingCompare != 0) return ratingCompare;
+    final reviewCountCompare = b.reviewCount.compareTo(a.reviewCount);
+    if (reviewCountCompare != 0) return reviewCountCompare;
+    final trendingCompare = b.trendingScore.compareTo(a.trendingScore);
+    if (trendingCompare != 0) return trendingCompare;
+    return a.name.compareTo(b.name);
+  }
+
+  double _dishDistance(Dish dish, double? userLat, double? userLng) {
+    if (userLat == null || userLng == null) return double.maxFinite;
+    return LocationUtils.calculateDistance(
+      userLat,
+      userLng,
+      dish.restaurantLatitude ?? 0,
+      dish.restaurantLongitude ?? 0,
+    );
   }
 }

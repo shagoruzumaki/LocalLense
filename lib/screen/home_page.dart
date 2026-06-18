@@ -155,7 +155,12 @@ class _HomePageState extends State<HomePage>
         sortBy: _currentSort,
         searchByDish: false,
       );
-      final dishes = await _discoveryService.searchDishes(query);
+      final dishes = await _discoveryService.searchDishes(
+        query,
+        lat: _userLat,
+        lng: _userLng,
+        sortBy: _currentSort,
+      );
       if (mounted) {
         setState(() {
           _searchResults = results;
