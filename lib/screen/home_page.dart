@@ -125,7 +125,7 @@ class _HomePageState extends State<HomePage>
               : currentNeighbourhood,
         );
         _top10CriticsFuture = _top10Service.getTopCritics(
-          filter: 'week',
+          filter: 'alltime',
           neighbourhood: currentNeighbourhood == 'Global'
               ? null
               : currentNeighbourhood,
@@ -547,7 +547,7 @@ class _HomePageState extends State<HomePage>
         _buildSectionHeader(
           '💎',
           'Elite Critics',
-          'Most active reviewers in $_neighbourhood',
+          'Top reviewers of all time',
         ),
         const SizedBox(height: 14),
         Padding(
