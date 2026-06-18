@@ -1,4 +1,3 @@
-
 /// ─────────────────────────────────────────────────────────────────────────────
 /// Matches the `restaurants` table in Supabase exactly.
 /// ─────────────────────────────────────────────────────────────────────────────
@@ -41,11 +40,11 @@ class Restaurant {
   double? get lat => latitude;
   double? get lng => longitude;
   double get lensScore => algorithmScore ?? 0.0;
-  
-  /// Star rating (1-5). Used for both display and sorting.
-  /// Priority: 1. Algorithm Score (converted), 2. DB Rating, 3. Default 4.0
+
+  /// Star rating (1-5). Used for display.
+  /// Priority: 1. Algorithm Score (converted), 2. DB Rating, 3. No rating (0.0)
   double get rating {
-    double r = 4.0;
+    double r = 0.0;
     if (algorithmScore != null && algorithmScore! > 0) {
       r = algorithmScore! / 20.0;
     } else if (ratingFromSupabase != null && ratingFromSupabase! > 0) {
@@ -62,10 +61,13 @@ class Restaurant {
   String get categoryDisplay {
     if (category.isEmpty) return 'Restaurant';
     // Convert snake_case to Title Case
-    return category.split('_').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return category
+        .split('_')
+        .map((word) {
+          if (word.isEmpty) return '';
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 
   factory Restaurant.fromSupabase(Map<String, dynamic> json) {
@@ -84,7 +86,9 @@ class Restaurant {
           : null,
       photos: json['photos'] != null ? List<String>.from(json['photos']) : null,
       aiSummary: json['ai_summary'],
-      aiTags: json['ai_tags'] != null ? List<String>.from(json['ai_tags']) : null,
+      aiTags: json['ai_tags'] != null
+          ? List<String>.from(json['ai_tags'])
+          : null,
       algorithmScore: (json['algorithm_score'] as num?)?.toDouble(),
       ratingFromSupabase: (json['rating'] as num?)?.toDouble(),
       active: json['active'] ?? true,
@@ -121,8 +125,11 @@ class Restaurant {
     return Restaurant(
       id: json['place_id'] ?? '',
       name: json['name'] ?? 'Unknown Spot',
-      category: (json['types'] as List?)?.first?.toString().toLowerCase() ?? 'restaurant',
-      address: json['vicinity'] ?? json['formatted_address'] ?? 'Address Hidden',
+      category:
+          (json['types'] as List?)?.first?.toString().toLowerCase() ??
+          'restaurant',
+      address:
+          json['vicinity'] ?? json['formatted_address'] ?? 'Address Hidden',
       latitude: lat,
       longitude: lon,
       priceTier: json['price_level'] ?? 2,
@@ -208,7 +215,12 @@ class RestaurantFilters {
   });
 
   RestaurantFilters copyWith({
-    String? category, int? priceTier, bool? openNow, SortOption? sortBy, double? userLat, double? userLng,
+    String? category,
+    int? priceTier,
+    bool? openNow,
+    SortOption? sortBy,
+    double? userLat,
+    double? userLng,
   }) => RestaurantFilters(
     category: category ?? this.category,
     priceTier: priceTier ?? this.priceTier,
@@ -227,15 +239,22 @@ class SearchSuggestion {
   final String text;
   final SuggestionType type;
   final String restaurantId;
-  SearchSuggestion({required this.text, required this.type, required this.restaurantId});
+  SearchSuggestion({
+    required this.text,
+    required this.type,
+    required this.restaurantId,
+  });
 }
 
 abstract class RestaurantState {}
+
 class RestaurantLoading extends RestaurantState {}
+
 class RestaurantSuccess extends RestaurantState {
   final List<RestaurantWithScore> data;
   RestaurantSuccess(this.data);
 }
+
 class RestaurantError extends RestaurantState {
   final String message;
   RestaurantError(this.message);

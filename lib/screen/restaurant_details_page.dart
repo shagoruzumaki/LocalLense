@@ -154,8 +154,29 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
     if (!silent) setState(() => _loadingReviews = true);
     try {
       final reviews = await _reviewApi.getRestaurantReviews(id);
+      final reviewIds = reviews
+          .map((review) => review['id']?.toString())
+          .whereType<String>()
+          .toList();
+      final votedReviewIds = await _reviewApi.getCurrentUserVotedReviewIds(
+        reviewIds,
+      );
+      for (final review in reviews) {
+        final reviewId = review['id']?.toString();
+        if (reviewId != null && votedReviewIds.contains(reviewId)) {
+          final helpfulVotes = review['helpful_votes'] as int? ?? 0;
+          if (helpfulVotes == 0) {
+            review['helpful_votes'] = 1;
+          }
+        }
+      }
       if (mounted) {
-        setState(() => _reviews = reviews);
+        setState(() {
+          _reviews = reviews;
+          _votedReviewIds
+            ..clear()
+            ..addAll(votedReviewIds);
+        });
       }
     } catch (e) {
       if (mounted && !silent) {
@@ -175,7 +196,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
       final supabase = Supabase.instance.client;
       final response = await supabase
           .from('dishes')
-          .select('id, name, description, price, photo_url, is_available, avg_rating, review_count')
+          .select(
+            'id, name, description, price, photo_url, is_available, avg_rating, review_count',
+          )
           .eq('restaurant_id', restaurantId)
           .eq('is_available', true)
           .order('name', ascending: true);
@@ -1320,16 +1343,22 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
                     children: [
                       Icon(
                         isVoted ? Icons.thumb_up : Icons.thumb_up_outlined,
-                        color: isVoted ? const Color(0xFFFFD700) : Colors.white38,
+                        color: isVoted
+                            ? const Color(0xFFFFD700)
+                            : Colors.white38,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '$helpfulVotes Helpful',
                         style: TextStyle(
-                          color: isVoted ? const Color(0xFFFFD700) : Colors.white38,
+                          color: isVoted
+                              ? const Color(0xFFFFD700)
+                              : Colors.white38,
                           fontSize: 13,
-                          fontWeight: isVoted ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isVoted
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -1368,8 +1397,9 @@ class _RestaurantDetailsPageState extends State<RestaurantDetailsPage> {
   // PHOTOS TAB — from File 2: real community photos grid
   // ─────────────────────────────────────────────
   Widget _buildPhotosTab() {
-    final List<String> allPhotos =
-        _reviews.expand((r) => List<String>.from(r['photos'] ?? [])).toList();
+    final List<String> allPhotos = _reviews
+        .expand((r) => List<String>.from(r['photos'] ?? []))
+        .toList();
 
     if (_loadingReviews) {
       return const Center(
@@ -1630,8 +1660,9 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
         .map((dish) => dish['name'] as String? ?? '')
         .where((name) => name.isNotEmpty)
         .toSet();
-    final manualDishes =
-        dishMentions.where((dish) => !knownDishNames.contains(dish)).toList();
+    final manualDishes = dishMentions
+        .where((dish) => !knownDishNames.contains(dish))
+        .toList();
     _dishController.text = manualDishes.join(', ');
   }
 
@@ -1851,8 +1882,8 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                     color: Colors.white70,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-              ),
-            ),
+                  ),
+                ),
                 TextButton.icon(
                   onPressed: _pickPhotos,
                   icon: const Icon(
@@ -2044,10 +2075,13 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                       child: Text(
                         name,
                         style: TextStyle(
-                          color:
-                              isSelected ? const Color(0xFFFFD700) : Colors.white70,
+                          color: isSelected
+                              ? const Color(0xFFFFD700)
+                              : Colors.white70,
                           fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ),
@@ -2086,8 +2120,9 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
-                  disabledBackgroundColor:
-                      const Color(0xFFFFD700).withOpacity(0.4),
+                  disabledBackgroundColor: const Color(
+                    0xFFFFD700,
+                  ).withOpacity(0.4),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),

@@ -12,7 +12,8 @@ class SearchPage extends StatefulWidget {
   State<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateMixin {
+class _SearchPageState extends State<SearchPage>
+    with SingleTickerProviderStateMixin {
   final DiscoveryService _discoveryService = DiscoveryService();
   final LocationService _locationService = LocationService();
   final TextEditingController _searchController = TextEditingController();
@@ -31,7 +32,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
-        setState(() {}); 
+        setState(() {});
       }
     });
 
@@ -95,7 +96,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         lng: _userLng,
         searchByDish: true,
       );
-      
+
       final dishesFuture = _discoveryService.searchDishes(query);
 
       final responses = await Future.wait([resultsFuture, dishesFuture]);
@@ -138,10 +139,18 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
             decoration: InputDecoration(
               hintText: 'Search for dishes or places...',
               hintStyle: TextStyle(color: Colors.white30, fontSize: 14),
-              prefixIcon: const Icon(Icons.search, color: Colors.white30, size: 20),
-              suffixIcon: _searchController.text.isNotEmpty 
+              prefixIcon: const Icon(
+                Icons.search,
+                color: Colors.white30,
+                size: 20,
+              ),
+              suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.cancel, color: Colors.white30, size: 20),
+                      icon: const Icon(
+                        Icons.cancel,
+                        color: Colors.white30,
+                        size: 20,
+                      ),
                       onPressed: () {
                         _searchController.clear();
                         _performSearch();
@@ -157,7 +166,9 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
           preferredSize: const Size.fromHeight(48),
           child: Container(
             decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
+              border: Border(
+                bottom: BorderSide(color: Colors.white10, width: 0.5),
+              ),
             ),
             child: TabBar(
               controller: _tabController,
@@ -165,7 +176,10 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
               indicatorWeight: 3,
               labelColor: const Color(0xFFD70F64),
               unselectedLabelColor: Colors.white38,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
               tabs: const [
                 Tab(text: 'Restaurants'),
                 Tab(text: 'Menu items'),
@@ -175,13 +189,12 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFFD700)),
+            )
           : TabBarView(
               controller: _tabController,
-              children: [
-                _buildRestaurantResults(),
-                _buildDishResults(),
-              ],
+              children: [_buildRestaurantResults(), _buildDishResults()],
             ),
     );
   }
@@ -215,7 +228,10 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         children: [
           Icon(Icons.search, size: 80, color: Colors.white.withOpacity(0.05)),
           const SizedBox(height: 16),
-          Text('Search for your favorite spots', style: TextStyle(color: Colors.white.withOpacity(0.2))),
+          Text(
+            'Search for your favorite spots',
+            style: TextStyle(color: Colors.white.withOpacity(0.2)),
+          ),
         ],
       ),
     );
@@ -232,12 +248,21 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
               color: Colors.white.withOpacity(0.03),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.search_off_rounded, size: 100, color: Colors.white.withOpacity(0.05)),
+            child: Icon(
+              Icons.search_off_rounded,
+              size: 100,
+              color: Colors.white.withOpacity(0.05),
+            ),
           ),
           const SizedBox(height: 24),
           const Text(
             'No results found',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'serif',
+            ),
           ),
           const SizedBox(height: 12),
           Padding(
@@ -245,7 +270,10 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
             child: Text(
               'We couldn\'t find any restaurants or dishes matching "${_searchController.text}"',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.3),
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -254,8 +282,12 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   }
 
   Widget _buildDishCard(Dish dish) {
+    final dishRating = dish.avgRating;
+    final dishReviewCount = dish.reviewCount;
+
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
+      onTap: () =>
+          Navigator.pushNamed(context, '/dish-details', arguments: dish),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
@@ -273,7 +305,14 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                 width: 80,
                 height: 80,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.fastfood, size: 30, color: Colors.white38)),
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.white10,
+                  child: const Icon(
+                    Icons.fastfood,
+                    size: 30,
+                    color: Colors.white38,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -287,32 +326,61 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                       Expanded(
                         child: Text(
                           dish.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'serif',
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text(
+                        '৳${dish.price.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${dish.restaurantName ?? ''} • ${dish.restaurantAddress ?? ''}',
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const Icon(
+                        Icons.star,
+                        color: Color(0xFFFFD700),
+                        size: 14,
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        dish.restaurantRating?.toStringAsFixed(1) ?? '4.0',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        dishRating != null && dishReviewCount > 0
+                            ? '${dishRating.toStringAsFixed(1)} ($dishReviewCount)'
+                            : 'No ratings yet',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const Spacer(),
-                      const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 12),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white24,
+                        size: 12,
+                      ),
                     ],
                   ),
                 ],
@@ -327,7 +395,8 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   Widget _buildRestaurantCard(RestaurantWithScore item) {
     final r = item.restaurant;
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
+      onTap: () =>
+          Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
@@ -345,7 +414,14 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                 width: 80,
                 height: 80,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.white10, child: const Icon(Icons.restaurant, size: 30, color: Colors.white38)),
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.white10,
+                  child: const Icon(
+                    Icons.restaurant,
+                    size: 30,
+                    color: Colors.white38,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -359,37 +435,85 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                       Expanded(
                         child: Text(
                           r.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'serif',
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(item.scoreLabel.toUpperCase(), style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
+                      Text(
+                        item.scoreLabel.toUpperCase(),
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     r.address,
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text('৳' * r.priceTier, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12)),
+                      Text(
+                        '৳' * r.priceTier,
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 12,
+                        ),
+                      ),
                       const SizedBox(width: 4),
-                      Text('• ${r.categoryDisplay}', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                      Text(
+                        '• ${r.categoryDisplay}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 12,
+                        ),
+                      ),
                       if (item.distanceKm != null) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.near_me, color: Colors.white38, size: 10),
+                        const Icon(
+                          Icons.near_me,
+                          color: Colors.white38,
+                          size: 10,
+                        ),
                         const SizedBox(width: 4),
-                        Text('${item.distanceKm!.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        Text(
+                          '${item.distanceKm!.toStringAsFixed(1)} km',
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                       const Spacer(),
-                      const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
+                      const Icon(
+                        Icons.star,
+                        color: Color(0xFFFFD700),
+                        size: 14,
+                      ),
                       const SizedBox(width: 4),
-                      Text(r.rating.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text(
+                        r.rating.toStringAsFixed(1),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ],
