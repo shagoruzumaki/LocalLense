@@ -189,7 +189,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
         ),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/notifications'),
             icon: const Icon(Icons.notifications_outlined, color: Colors.white),
           ),
           IconButton(
@@ -384,7 +384,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                           ],
                         ),
                         const Text(
-                          'UNDER ৳ 250',
+                          'UNDER ৳ 300',
                           style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ],

@@ -16,6 +16,7 @@ import 'package:local_lense/screen/ranking_page.dart';
 import 'package:local_lense/screen/restaurant_details_page.dart';
 import 'package:local_lense/screen/verification_page.dart';
 import 'package:local_lense/screen/dish_details_page.dart';
+import 'package:local_lense/screen/notifications_page.dart';
 import 'package:local_lense/model/dish.dart';
 
 void main() async {
@@ -89,6 +90,7 @@ class MyApp extends StatelessWidget {
         '/map': (_) => const MapPage(),
         '/home': (_) => const HomePage(),
         '/verification': (_) => const VerificationPage(),
+        '/notifications': (_) => const NotificationsPage(),
       },
     );
   }

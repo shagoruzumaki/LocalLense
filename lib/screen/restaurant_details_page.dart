@@ -1738,17 +1738,25 @@ class _ReviewFormSheetState extends State<_ReviewFormSheet> {
         );
       }
 
-      await widget.reviewApi.submitReview(
-        restaurantId: widget.restaurantId,
-        moodTag: _selectedMood,
-        rating: _selectedRating,
-        photoUrls: allPhotoUrls,
-        body: _bodyController.text.trim(),
-        dishMentions: allDishes.toList(),
-      );
-
       if (widget.editReview != null) {
-        await widget.reviewApi.deleteReview(widget.editReview!['id'] as String);
+        await widget.reviewApi.updateReview(
+          reviewId: widget.editReview!['id'] as String,
+          restaurantId: widget.restaurantId,
+          moodTag: _selectedMood,
+          rating: _selectedRating,
+          photoUrls: allPhotoUrls,
+          body: _bodyController.text.trim(),
+          dishMentions: allDishes.toList(),
+        );
+      } else {
+        await widget.reviewApi.submitReview(
+          restaurantId: widget.restaurantId,
+          moodTag: _selectedMood,
+          rating: _selectedRating,
+          photoUrls: allPhotoUrls,
+          body: _bodyController.text.trim(),
+          dishMentions: allDishes.toList(),
+        );
       }
 
       if (mounted) {

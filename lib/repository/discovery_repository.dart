@@ -50,7 +50,7 @@ class DiscoveryRepository {
   Future<List<Dish>> getTrendingDishes({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       // Fetch a larger batch of trending dishes to ensure local ones are included
@@ -59,7 +59,7 @@ class DiscoveryRepository {
           .select('*, restaurants!inner(*)')
           .eq('is_available', true)
           .order('trending_score', ascending: false)
-          .limit(200);
+          .limit(500);
 
       List<Dish> dishes = response
           .map((json) => Dish.fromSupabase(json))
@@ -104,7 +104,7 @@ class DiscoveryRepository {
   Future<List<Dish>> getPopularDishes({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
@@ -112,7 +112,7 @@ class DiscoveryRepository {
           .select('*, restaurants!inner(*)')
           .eq('is_available', true)
           .order('mention_count', ascending: false)
-          .limit(200);
+          .limit(500);
 
       List<Dish> dishes = response
           .map((json) => Dish.fromSupabase(json))
@@ -151,7 +151,7 @@ class DiscoveryRepository {
   Future<List<RestaurantWithScore>> getTopRated({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
@@ -159,7 +159,7 @@ class DiscoveryRepository {
           .select()
           .eq('active', true)
           .order('algorithm_score', ascending: false)
-          .limit(100);
+          .limit(500);
 
       final restaurants = response
           .map((json) => Restaurant.fromSupabase(json))
@@ -192,7 +192,7 @@ class DiscoveryRepository {
   Future<List<RestaurantWithScore>> getNearbyNow({
     required double userLat,
     required double userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     return getNearby(
       userLat: userLat,
@@ -206,7 +206,7 @@ class DiscoveryRepository {
   Future<List<Dish>> getBudgetEats({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
@@ -214,9 +214,9 @@ class DiscoveryRepository {
           .select('*, restaurants!inner(*)')
           .eq('is_available', true)
           .gte('price', 1)
-          .lte('price', 250)
+          .lte('price', 300)
           .order('price', ascending: true)
-          .limit(200);
+          .limit(1000); // Increased internal fetch
 
       List<Dish> dishes = response
           .map((json) => Dish.fromSupabase(json))
@@ -224,6 +224,11 @@ class DiscoveryRepository {
 
       if (userLat != null && userLng != null) {
         dishes.sort((a, b) {
+          // 1. Primary Sort: Price Ascending (Must show ascending order)
+          final priceCompare = a.price.compareTo(b.price);
+          if (priceCompare != 0) return priceCompare;
+
+          // 2. Secondary Sort: Quality & Proximity (Tie-breaker, keeping other features)
           double distA = LocationUtils.calculateDistance(
             userLat,
             userLng,
@@ -258,7 +263,7 @@ class DiscoveryRepository {
   Future<List<RestaurantWithScore>> getRecommended({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
@@ -266,7 +271,7 @@ class DiscoveryRepository {
           .select()
           .eq('active', true)
           .order('algorithm_score', ascending: false)
-          .limit(100);
+          .limit(500);
       final restaurants = response
           .map((json) => Restaurant.fromSupabase(json))
           .toList();
@@ -293,7 +298,7 @@ class DiscoveryRepository {
   Future<List<RestaurantWithScore>> getHiddenGems({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
@@ -302,7 +307,7 @@ class DiscoveryRepository {
           .eq('active', true)
           .gt('algorithm_score', 70)
           .order('algorithm_score', ascending: false)
-          .limit(100);
+          .limit(500);
 
       final restaurants = response
           .map((json) => Restaurant.fromSupabase(json))
@@ -331,7 +336,7 @@ class DiscoveryRepository {
   Future<List<RestaurantWithScore>> getNewlyAdded({
     double? userLat,
     double? userLng,
-    int limit = 10,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
@@ -339,26 +344,27 @@ class DiscoveryRepository {
           .select()
           .eq('active', true)
           .order('created_at', ascending: false)
-          .limit(limit);
+          .limit(500);
       final restaurants = response
           .map((json) => Restaurant.fromSupabase(json))
           .toList();
       final scores = await _fetchScores(restaurants.map((r) => r.id).toList());
-      return _enrich(restaurants, scores, userLat, userLng);
+      var result = _enrich(restaurants, scores, userLat, userLng);
+      return result.take(limit).toList();
     } catch (e) {
       return [];
     }
   }
 
   // 🎉 Offers & Deals
-  Future<List<RestaurantWithScore>> getOffersAndDeals({int limit = 10}) async {
+  Future<List<RestaurantWithScore>> getOffersAndDeals({int limit = 100}) async {
     try {
       final List dishResponse = await _db
           .from('dishes')
           .select('restaurant_id')
           .eq('is_available', true)
           .or(
-            'description.ilike.%off%,description.ilike.%deal%,description.ilike.%discount%,name.ilike.%off%,name.ilike.%deal%,name.ilike.%discount%',
+            'description.ilike.%off%,description.ilike.%deal%,description.ilike.%discount%,description.ilike.%free%,description.ilike.%bogo%,description.ilike.%%%,name.ilike.%off%,name.ilike.%deal%,name.ilike.%discount%,name.ilike.%free%,name.ilike.%bogo%,name.ilike.%%%',
           );
 
       final restaurantIds = dishResponse
@@ -494,7 +500,7 @@ class DiscoveryRepository {
     String? category,
     bool openNow = false,
     SortOption sortBy = SortOption.score,
-    int limit = 20,
+    int limit = 100,
     bool searchByDish = true,
   }) async {
     try {
@@ -585,7 +591,7 @@ class DiscoveryRepository {
     double? userLat,
     double? userLng,
     SortOption sortBy = SortOption.score,
-    int limit = 20,
+    int limit = 100,
   }) async {
     final q = query.trim();
     if (q.isEmpty) return [];
@@ -700,14 +706,14 @@ class DiscoveryRepository {
     required double userLng,
     double radiusKm = 2.0,
     bool openNow = false,
-    int limit = 20,
+    int limit = 100,
   }) async {
     try {
       final List response = await _db
           .from('restaurants')
           .select()
           .eq('active', true)
-          .limit(100);
+          .limit(1000); // Increased internal fetch for nearby
       final restaurants = response
           .map((json) => Restaurant.fromSupabase(json))
           .toList();

@@ -212,10 +212,13 @@ class _HomePageState extends State<HomePage>
                         ),
                       ),
                       const Spacer(),
-                      const Icon(
-                        Icons.notifications_outlined,
-                        color: Colors.white,
-                        size: 28,
+                      IconButton(
+                        onPressed: () => Navigator.pushNamed(context, '/notifications'),
+                        icon: const Icon(
+                          Icons.notifications_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                       const SizedBox(width: 15),
                       GestureDetector(

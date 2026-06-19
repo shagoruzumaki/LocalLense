@@ -5,7 +5,7 @@ class Top10Service {
   final _supabase = Supabase.instance.client;
 
   /// Fetches All-Time Leaderboard, optionally filtered by neighbourhood
-  Future<List<Restaurant>> getAllTimeLeaderboard({String? neighbourhood, int limit = 10}) async {
+  Future<List<Restaurant>> getAllTimeLeaderboard({String? neighbourhood, int limit = 1000}) async {
     try {
       var query = _supabase
           .from('restaurants')
@@ -114,7 +114,7 @@ class Top10Service {
             .from('users')
             .select('*')
             .order('helpful_votes', ascending: false)
-            .limit(10);
+            .limit(1000);
         
         return (response as List).map((u) {
           final user = Map<String, dynamic>.from(u);
@@ -149,7 +149,7 @@ class Top10Service {
         final usersResp = await _supabase
             .from('users')
             .select('*')
-            .inFilter('id', sortedUids.take(10).toList());
+            .inFilter('id', sortedUids.take(100).toList());
         
         activeCritics = (usersResp as List).map((u) {
           final user = Map<String, dynamic>.from(u);

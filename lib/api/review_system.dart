@@ -80,6 +80,76 @@ class ReviewApi {
     return response;
   }
 
+  /// Update an existing review
+  Future<Map<String, dynamic>> updateReview({
+    required String reviewId,
+    required String restaurantId,
+    required String moodTag,
+    required double rating,
+    required List<String> photoUrls,
+    required String body,
+    List<String> dishMentions = const [],
+  }) async {
+    // 1. Validation
+    if (photoUrls.isEmpty) throw Exception('At least 1 photo is required.');
+    if (body.trim().isEmpty) throw Exception('Review body cannot be empty.');
+
+    // 2. Fetch old review to rollback metrics
+    final oldReview = await _supabase
+        .from('reviews')
+        .select('dish_mentions, rating, user_id')
+        .eq('id', reviewId)
+        .single();
+
+    if (oldReview['user_id'] != _currentUserId) {
+      throw Exception('Unauthorized');
+    }
+
+    final oldMentions = List<String>.from(oldReview['dish_mentions'] ?? []);
+    final double oldRating = (oldReview['rating'] as num).toDouble();
+
+    // 3. Rollback old metrics
+    await _deleteDishReviewsForCurrentUser(restaurantId);
+    await _rollbackDishMetrics(restaurantId, oldMentions, oldRating);
+
+    // 4. Clean and deduplicate dish mentions
+    final uniqueDishes = dishMentions
+        .map((d) => d.trim())
+        .where((d) => d.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // 5. Update the review
+    final response = await _supabase
+        .from('reviews')
+        .update({
+          'mood_tag': moodTag,
+          'rating': rating,
+          'photos': photoUrls,
+          'dish_mentions': uniqueDishes,
+          'body': body.trim(),
+        })
+        .eq('id', reviewId)
+        .select()
+        .single();
+
+    // 6. Trigger new updates
+    await _insertDishReviews(
+      restaurantId: restaurantId,
+      dishNames: uniqueDishes,
+      rating: rating,
+      comment: body.trim(),
+      photoUrls: photoUrls,
+    );
+    await _updateDishMetrics(restaurantId, uniqueDishes, rating);
+    await _recalculateScore(restaurantId);
+
+    final aiSummary = AiSummaryApi();
+    await aiSummary.checkAndGenerateSummary(restaurantId);
+
+    return response;
+  }
+
   Future<void> _insertDishReviews({
     required String restaurantId,
     required List<String> dishNames,

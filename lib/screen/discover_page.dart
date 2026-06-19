@@ -35,7 +35,6 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
   List<RestaurantWithScore> _recommended = [];
   List<RestaurantWithScore> _hiddenGems = [];
   List<RestaurantWithScore> _newlyAdded = [];
-  List<RestaurantWithScore> _offers = []; // Changed from List<Dish>
   List<String> _areas = [];
   
   bool _isLoading = true;
@@ -78,7 +77,6 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
         _discoveryService.getRecommended(lat: _userLat, lng: _userLng),
         _discoveryService.getHiddenGems(lat: _userLat, lng: _userLng),
         _discoveryService.getNewlyAdded(lat: _userLat, lng: _userLng),
-        _discoveryService.getOffersAndDeals(),
         _discoveryService.getAreas(lat: _userLat, lng: _userLng), // Pass live location here
       ]);
 
@@ -92,8 +90,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
           _recommended = results[5] as List<RestaurantWithScore>;
           _hiddenGems = results[6] as List<RestaurantWithScore>;
           _newlyAdded = results[7] as List<RestaurantWithScore>;
-          _offers = results[8] as List<RestaurantWithScore>; // Updated cast
-          _areas = results[9] as List<String>;
+          _areas = results[8] as List<String>;
           _isLoading = false;
         });
       }
@@ -161,7 +158,6 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
                     _buildRestaurantSection('🎯 Recommended For You', _recommended),
                     _buildRestaurantSection('💎 Hidden Gems', _hiddenGems),
                     _buildRestaurantSection('🆕 Newly Added', _newlyAdded),
-                    _buildOffersSection('🎉 Offers & Deals', _offers),
                     _buildAreaSection('🗺️ Explore by Area', _areas),
                     const SizedBox(height: 100),
                   ],
@@ -186,33 +182,6 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
             itemBuilder: (context, index) => _buildDishCard(dishes[index]),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildOffersSection(String title, List<RestaurantWithScore> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(title),
-        if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Text(
-              'No offers available at the moment',
-              style: TextStyle(color: Colors.white38, fontSize: 14, fontStyle: FontStyle.italic),
-            ),
-          )
-        else
-          SizedBox(
-            height: 220,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(left: 20),
-              itemCount: items.length,
-              itemBuilder: (context, index) => _buildRestaurantCard(items[index]),
-            ),
-          ),
       ],
     );
   }
