@@ -17,7 +17,10 @@ import 'package:local_lense/screen/restaurant_details_page.dart';
 import 'package:local_lense/screen/verification_page.dart';
 import 'package:local_lense/screen/dish_details_page.dart';
 import 'package:local_lense/screen/notifications_page.dart';
+import 'package:local_lense/services/notification_service.dart';
 import 'package:local_lense/model/dish.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +32,9 @@ void main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
   );
 
+  // Initialize Notifications
+  await NotificationService.init(navigatorKey);
+
   runApp(const MyApp());
 }
 
@@ -39,6 +45,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'LocalLens',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -84,7 +91,6 @@ class MyApp extends StatelessWidget {
         '/forgot-password': (_) => const ForgotPasswordPage(),
         '/reset-password': (_) => const ResetPasswordPage(),
         '/discover': (_) => const DiscoverPage(),
-        // '/search' is now handled in onGenerateRoute
         '/profile': (_) => const ProfilePage(),
         '/ranking': (_) => const RankingPage(),
         '/map': (_) => const MapPage(),

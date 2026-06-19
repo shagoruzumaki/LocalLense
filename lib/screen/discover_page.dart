@@ -134,6 +134,10 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
         ),
         actions: [
           IconButton(
+            onPressed: () => Navigator.pushNamed(context, '/notifications'),
+            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          ),
+          IconButton(
             onPressed: _fetchDiscoveryData,
             icon: const Icon(Icons.refresh, color: Colors.white),
           ),

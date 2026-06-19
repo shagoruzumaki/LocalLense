@@ -3,8 +3,11 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  static GlobalKey<NavigatorState>? _navigatorKey;
 
-  static Future<void> init() async {
+  static Future<void> init(GlobalKey<NavigatorState> navigatorKey) async {
+    _navigatorKey = navigatorKey;
+
     // 1. Initialize local notifications
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -17,12 +20,6 @@ class NotificationService {
         _handleNotificationClick(details.payload);
       },
     );
-
-    // Note: Firebase Messaging (FCM) removed. 
-    // To implement push notifications using Supabase, 
-    // you would typically use Supabase Edge Functions to trigger 
-    // notifications via FCM or another provider, but since we are 
-    // removing Firebase, we'll keep only local notification logic.
   }
 
   /// Handles routing/logic for specific notification types
@@ -31,22 +28,8 @@ class NotificationService {
     
     debugPrint("Notification Clicked with Type: $type");
     
-    // logic based on specific types
-    switch (type) {
-      case 'tier_upgrade':
-        break;
-      case 'reward_unlocked':
-        break;
-      case 'verification':
-        break;
-      case 'top10_updated':
-      case 'nearby_top10':
-        break;
-      case 'review_voted':
-        break;
-      default:
-        debugPrint("Unhandled notification type: $type");
-    }
+    // Logic to navigate when a system notification is tapped
+    _navigatorKey?.currentState?.pushNamed('/notifications');
   }
 
   /// Show a local notification
