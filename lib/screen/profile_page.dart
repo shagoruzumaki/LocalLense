@@ -4,6 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/user_service.dart';
 import '../api/review_system.dart';
 import '../api/tier_upgrade_api.dart';
+import 'admin/admin_restaurants_screen.dart';
+import 'admin/admin_dishes_screen.dart';
+import 'admin/admin_reviews_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -23,6 +26,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic>? _userData;
   Map<String, dynamic>? _tierInfo;
   List<Map<String, dynamic>> _reviews = [];
+
+  // Admin check — derived from _userData['role'], no extra network call needed.
+  bool get _isAdmin => (_userData?['role'] as String?) == 'admin';
 
   @override
   void initState() {
@@ -295,6 +301,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   _buildBadge(tier, _getTierColor(tier)),
                   if (verified) _buildBadge(verifiedLabel, Colors.green),
+                  if (_isAdmin) _buildBadge('ADMIN', Colors.redAccent),
                 ],
               ),
               const SizedBox(height: 24),
@@ -308,6 +315,44 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
               const SizedBox(height: 32),
+
+              // ── Admin Panel (only visible to role == 'admin') ──────
+              if (_isAdmin) ...[
+                _buildSectionHeader('Admin Panel'),
+                const SizedBox(height: 16),
+
+                _buildSettingsItem(
+                  Icons.storefront_outlined,
+                  'Manage Restaurants',
+                  subtitle: 'Add, edit, or deactivate restaurants',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminRestaurantsScreen()),
+                  ),
+                ),
+
+                _buildSettingsItem(
+                  Icons.restaurant_menu_outlined,
+                  'Manage Dishes',
+                  subtitle: 'Pick a restaurant to manage its menu',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminDishesScreen()),
+                  ),
+                ),
+
+                _buildSettingsItem(
+                  Icons.rate_review_outlined,
+                  'Manage Reviews',
+                  subtitle: 'Moderate, approve, or remove reviews',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminReviewsScreen()),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+              ],
 
               _buildSectionHeader('Account Settings'),
               const SizedBox(height: 16),
