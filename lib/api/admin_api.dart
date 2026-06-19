@@ -72,6 +72,33 @@ class AdminApi {
   }
 
   // ─────────────────────────────────────────────
+  // 2b. GET /admin/reviews — ALL reviews (not just flagged), for the Reviews
+  // management screen. Optionally scoped to a single restaurant.
+  Future<List<Map<String, dynamic>>> getAllReviews({
+    String? restaurantId,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    await _requireAdmin();
+    final from = (page - 1) * pageSize;
+    final to = from + pageSize - 1;
+
+    var query = _supabase
+        .from('reviews')
+        .select('*, users (id, name, tier, verified, profile_photo_url), restaurants (id, name)');
+
+    if (restaurantId != null) {
+      query = query.eq('restaurant_id', restaurantId);
+    }
+
+    final response = await query
+        .order('created_at', ascending: false)
+        .range(from, to);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────────
   // 3. PATCH /admin/reviews/:id/approve
   Future<void> approveReview(String reviewId) async {
     await _requireAdmin();
@@ -157,6 +184,14 @@ class AdminApi {
   }
 
   // ─────────────────────────────────────────────
+  // 8b. PATCH /admin/restaurants/:id/restore — undo a soft delete
+  Future<void> restoreRestaurant(String restaurantId) async {
+    await _requireAdmin();
+    await _supabase.from('restaurants').update({'active': true}).eq('id', restaurantId);
+    debugPrint('[AdminApi] Restaurant $restaurantId restored.');
+  }
+
+  // ─────────────────────────────────────────────
   // 9. PATCH /admin/users/:id/ban
   Future<void> banUser(String userId) async {
     await _requireAdmin();
@@ -190,5 +225,75 @@ class AdminApi {
     await _requireAdmin();
     await _aiSummaryApi.generateAndSaveSummary(restaurantId);
     debugPrint('[AdminApi] Summary regenerated for $restaurantId.');
+  }
+
+  // ─────────────────────────────────────────────
+  // 13. GET /admin/restaurants/:id/dishes
+  // Used by the Dishes management screen after admin picks a restaurant.
+  Future<List<Map<String, dynamic>>> getDishesByRestaurant(String restaurantId) async {
+    await _requireAdmin();
+    final response = await _supabase
+        .from('dishes')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────────
+  // 14. POST /admin/dishes
+  Future<Map<String, dynamic>> addDish({
+    required String restaurantId,
+    required String name,
+    String? description,
+    double? price,
+    String? photoUrl,
+    String? category,
+    bool isAvailable = true,
+  }) async {
+    await _requireAdmin();
+    final response = await _supabase.from('dishes').insert({
+      'restaurant_id': restaurantId,
+      'name': name,
+      'description': description,
+      'price': price,
+      'photo_url': photoUrl,
+      'category': category,
+      'is_available': isAvailable,
+      'avg_rating': 0,
+      'review_count': 0,
+      'is_popular': false,
+    }).select().single();
+    debugPrint('[AdminApi] Dish "$name" added to restaurant $restaurantId.');
+    return response;
+  }
+
+  // ─────────────────────────────────────────────
+  // 15. PATCH /admin/dishes/:id
+  Future<void> updateDish(String dishId, Map<String, dynamic> fields) async {
+    await _requireAdmin();
+    if (fields.isEmpty) throw Exception('No fields provided to update.');
+    await _supabase.from('dishes').update(fields).eq('id', dishId);
+    debugPrint('[AdminApi] Dish $dishId updated.');
+  }
+
+  // ─────────────────────────────────────────────
+  // 16. DELETE /admin/dishes/:id
+  // Dishes have no `active` flag in the schema, so this is a hard delete.
+  // If dish_reviews reference this dish, those rows are removed first to
+  // avoid an FK violation (mirrors the rollback pattern used for reviews).
+  Future<void> deleteDish(String dishId) async {
+    await _requireAdmin();
+    await _supabase.from('dish_reviews').delete().eq('dish_id', dishId);
+    await _supabase.from('dishes').delete().eq('id', dishId);
+    debugPrint('[AdminApi] Dish $dishId permanently deleted.');
+  }
+
+  // ─────────────────────────────────────────────
+  // 17. PATCH /admin/dishes/:id/toggle-availability
+  Future<void> toggleDishAvailability(String dishId, bool isAvailable) async {
+    await _requireAdmin();
+    await _supabase.from('dishes').update({'is_available': isAvailable}).eq('id', dishId);
+    debugPrint('[AdminApi] Dish $dishId availability set to $isAvailable.');
   }
 }
