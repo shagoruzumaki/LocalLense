@@ -4,9 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/user_service.dart';
 import '../api/review_system.dart';
 import '../api/tier_upgrade_api.dart';
-import 'admin/admin_restaurants_screen.dart';
-import 'admin/admin_dishes_screen.dart';
-import 'admin/admin_reviews_screen.dart';
+import '../admin/admin_restaurants_screen.dart';
+import '../admin/admin_dishes_screen.dart';
+import '../admin/admin_reviews_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
