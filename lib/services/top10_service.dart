@@ -5,7 +5,7 @@ class Top10Service {
   final _supabase = Supabase.instance.client;
 
   /// Fetches All-Time Leaderboard, optionally filtered by neighbourhood
-  Future<List<Restaurant>> getAllTimeLeaderboard({String? neighbourhood, int limit = 1000}) async {
+  Future<List<Restaurant>> getAllTimeLeaderboard({String? neighbourhood, int limit = 10}) async {
     try {
       var query = _supabase
           .from('restaurants')
@@ -16,13 +16,12 @@ class Top10Service {
         query = query.ilike('address', '%$neighbourhood%');
       }
 
-      // Sort by the master algorithm score for the leaderboard
       final response = await query
           .order('algorithm_score', ascending: false)
           .limit(limit);
       
       final results = (response as List).map((json) => Restaurant.fromSupabase(json)).toList();
-      // We keep the database order (algorithm_score) for the leaderboard
+      results.sort((a, b) => b.rating.compareTo(a.rating));
       return results;
     } catch (e) {
       return [];
@@ -82,7 +81,7 @@ class Top10Service {
           final id = j['id'].toString();
           final periodAvg = periodRatings[id]!.reduce((v, e) => v + e) / periodRatings[id]!.length;
           final modifiedJson = Map<String, dynamic>.from(j);
-          // For trending, we use the period average to sort
+          modifiedJson['algorithm_score'] = null; 
           modifiedJson['rating'] = periodAvg;
           return Restaurant.fromSupabase(modifiedJson);
         }).toList();
@@ -115,7 +114,7 @@ class Top10Service {
             .from('users')
             .select('*')
             .order('helpful_votes', ascending: false)
-            .limit(1000);
+            .limit(10);
         
         return (response as List).map((u) {
           final user = Map<String, dynamic>.from(u);
@@ -150,7 +149,7 @@ class Top10Service {
         final usersResp = await _supabase
             .from('users')
             .select('*')
-            .inFilter('id', sortedUids.take(100).toList());
+            .inFilter('id', sortedUids.take(10).toList());
         
         activeCritics = (usersResp as List).map((u) {
           final user = Map<String, dynamic>.from(u);
