@@ -12,7 +12,8 @@ class Top10Service {
           .select('*')
           .eq('active', true);
       
-      if (neighbourhood != null && neighbourhood != 'Global' && neighbourhood != 'Nearby') {
+      bool isFiltered = neighbourhood != null && neighbourhood != 'Global' && neighbourhood != 'Nearby';
+      if (isFiltered) {
         query = query.ilike('address', '%$neighbourhood%');
       }
 
@@ -21,6 +22,12 @@ class Top10Service {
           .limit(limit);
       
       final results = (response as List).map((json) => Restaurant.fromSupabase(json)).toList();
+      
+      // Fallback: If filtered but no results, try without filter
+      if (results.isEmpty && isFiltered) {
+        return getAllTimeLeaderboard(neighbourhood: null, limit: limit);
+      }
+
       results.sort((a, b) => b.rating.compareTo(a.rating));
       return results;
     } catch (e) {
@@ -46,6 +53,11 @@ class Top10Service {
             .select('id')
             .ilike('address', '%$neighbourhood%');
         localIds = (localRes as List).map((r) => r['id'].toString()).toList();
+        
+        // If neighbourhood specified but no restaurants found there, fall back to global
+        if (localIds.isEmpty) {
+          return await getTopRestaurantsByPeriod(filter: filter, neighbourhood: null);
+        }
       }
 
       // 2. Fetch reviews in the period
@@ -54,7 +66,7 @@ class Top10Service {
           .select('restaurant_id, rating')
           .gte('created_at', startDate);
       
-      if (localIds != null) {
+      if (localIds != null && localIds.isNotEmpty) {
         reviewsQuery = reviewsQuery.inFilter('restaurant_id', localIds);
       }
 
@@ -79,7 +91,8 @@ class Top10Service {
 
         activeResults = (restaurantsResp as List).map((j) {
           final id = j['id'].toString();
-          final periodAvg = periodRatings[id]!.reduce((v, e) => v + e) / periodRatings[id]!.length;
+          final ratings = periodRatings[id]!;
+          final periodAvg = ratings.reduce((v, e) => v + e) / ratings.length;
           final modifiedJson = Map<String, dynamic>.from(j);
           modifiedJson['algorithm_score'] = null; 
           modifiedJson['rating'] = periodAvg;
