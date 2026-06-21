@@ -117,9 +117,9 @@ class _HomePageState extends State<HomePage>
           _nearbyRestaurantsFuture = Future.value([]);
         }
 
-        // Use 'week' for Home Page to make it dynamic/trending
+        // Show All-Time Top 10 on Home Page
         _top10RestaurantsFuture = _top10Service.getTopRestaurantsByPeriod(
-          filter: 'week',
+          filter: 'alltime',
           neighbourhood: currentNeighbourhood == 'Global'
               ? null
               : currentNeighbourhood,
@@ -175,8 +175,8 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -204,28 +204,25 @@ class _HomePageState extends State<HomePage>
                       const SizedBox(width: 8),
                       Text(
                         _neighbourhood,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           fontFamily: 'serif',
                         ),
                       ),
                       const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.pushNamed(context, '/notifications'),
-                        icon: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+                      Icon(
+                        Icons.notifications_outlined,
+                        color: colors.onSurface,
+                        size: 28,
                       ),
                       const SizedBox(width: 15),
                       GestureDetector(
                         onTap: () => Navigator.pushNamed(context, '/profile'),
                         child: CircleAvatar(
                           radius: 18,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          backgroundColor: colors.surfaceContainerHighest,
                           backgroundImage:
                               (_userPhotoUrl != null &&
                                   _userPhotoUrl!.isNotEmpty)
@@ -233,10 +230,10 @@ class _HomePageState extends State<HomePage>
                               : null,
                           child:
                               (_userPhotoUrl == null || _userPhotoUrl!.isEmpty)
-                              ? const Icon(
+                              ? Icon(
                                   Icons.person,
                                   size: 18,
-                                  color: Colors.white54,
+                                  color: colors.onSurfaceVariant,
                                 )
                               : null,
                         ),
@@ -245,12 +242,12 @@ class _HomePageState extends State<HomePage>
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
                     'What are you craving?',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: colors.onSurface,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'serif',
@@ -265,18 +262,16 @@ class _HomePageState extends State<HomePage>
                     onChanged: _performSearch,
                     decoration: InputDecoration(
                       hintText: 'Search for dishes or places...',
-                      hintStyle: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.3),
-                      ),
+                      hintStyle: TextStyle(color: colors.onSurfaceVariant),
                       prefixIcon: Icon(
                         Icons.search,
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: colors.onSurfaceVariant,
                       ),
                       suffixIcon: _isSearching
                           ? IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.close,
-                                color: Colors.white54,
+                                color: colors.onSurfaceVariant,
                               ),
                               onPressed: () {
                                 _searchController.clear();
@@ -289,7 +284,7 @@ class _HomePageState extends State<HomePage>
                             )
                           : null,
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      fillColor: colors.surfaceContainerLow,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
@@ -304,7 +299,7 @@ class _HomePageState extends State<HomePage>
                     indicatorColor: const Color(0xFFFFD700),
                     indicatorWeight: 3,
                     labelColor: const Color(0xFFFFD700),
-                    unselectedLabelColor: Colors.white38,
+                    unselectedLabelColor: colors.onSurfaceVariant,
                     labelStyle: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -341,11 +336,11 @@ class _HomePageState extends State<HomePage>
         ),
       ),
       bottomNavigationBar: Theme(
-        data: ThemeData(canvasColor: const Color(0xFF0D0D0D)),
+        data: Theme.of(context).copyWith(canvasColor: colors.surface),
         child: BottomNavigationBar(
-          backgroundColor: const Color(0xFF0D0D0D),
+          backgroundColor: colors.surface,
           selectedItemColor: const Color(0xFFFFD700),
-          unselectedItemColor: Colors.white38,
+          unselectedItemColor: colors.onSurfaceVariant,
           type: BottomNavigationBarType.fixed,
           currentIndex: 0,
           onTap: (index) {
@@ -377,6 +372,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildSortChip(String label, SortOption option) {
+    final colors = Theme.of(context).colorScheme;
     final isSelected = _currentSort == option;
     return GestureDetector(
       onTap: () {
@@ -387,17 +383,17 @@ class _HomePageState extends State<HomePage>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFFFFD700)
-              : Colors.white.withValues(alpha: 0.05),
+              ? colors.primary
+              : colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? const Color(0xFFFFD700) : Colors.white12,
+            color: isSelected ? colors.primary : colors.outlineVariant,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white,
+            color: isSelected ? colors.onPrimary : colors.onSurface,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             fontSize: 12,
           ),
@@ -407,6 +403,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildSearchResults() {
+    final colors = Theme.of(context).colorScheme;
     if (_isLoadingSearch)
       return const Center(
         child: Padding(
@@ -417,12 +414,12 @@ class _HomePageState extends State<HomePage>
 
     if (_searchTabController.index == 0) {
       if (_searchResults.isEmpty)
-        return const Center(
+        return Center(
           child: Padding(
-            padding: EdgeInsets.all(40),
+            padding: const EdgeInsets.all(40),
             child: Text(
               'No restaurants found',
-              style: TextStyle(color: Colors.white38),
+              style: TextStyle(color: colors.onSurfaceVariant),
             ),
           ),
         );
@@ -454,12 +451,12 @@ class _HomePageState extends State<HomePage>
       );
     } else {
       if (_dishResults.isEmpty)
-        return const Center(
+        return Center(
           child: Padding(
-            padding: EdgeInsets.all(40),
+            padding: const EdgeInsets.all(40),
             child: Text(
               'No menu items found',
-              style: TextStyle(color: Colors.white38),
+              style: TextStyle(color: colors.onSurfaceVariant),
             ),
           ),
         );
@@ -475,22 +472,23 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildMainContent() {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(
           '🏆',
-          'Trending This Week',
-          'Best spots in $_neighbourhood right now',
+          'Top 10 Leaderboard',
+          'The absolute best spots in $_neighbourhood',
         ),
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: colors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: colors.outlineVariant),
             ),
             child: FutureBuilder<List<Restaurant>>(
               future: _top10RestaurantsFuture,
@@ -509,13 +507,13 @@ class _HomePageState extends State<HomePage>
                 return Column(
                   children: [
                     _buildListHeader('Top 10 Restaurants', Icons.auto_awesome),
-                    const Divider(color: Colors.white10, height: 1),
+                    Divider(color: colors.outlineVariant, height: 1),
                     if (displayList.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(20),
+                      Padding(
+                        padding: const EdgeInsets.all(20),
                         child: Text(
                           'No rankings available',
-                          style: TextStyle(color: Colors.white38),
+                          style: TextStyle(color: colors.onSurfaceVariant),
                         ),
                       )
                     else
@@ -547,19 +545,15 @@ class _HomePageState extends State<HomePage>
           ),
         ),
         const SizedBox(height: 20),
-        _buildSectionHeader(
-          '💎',
-          'Elite Critics',
-          'Top reviewers of all time',
-        ),
+        _buildSectionHeader('💎', 'Elite Critics', 'Top reviewers of all time'),
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: colors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: colors.outlineVariant),
             ),
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _top10CriticsFuture,
@@ -581,13 +575,13 @@ class _HomePageState extends State<HomePage>
                       'Top 10 Critics',
                       Icons.verified_user_outlined,
                     ),
-                    const Divider(color: Colors.white10, height: 1),
+                    Divider(color: colors.outlineVariant, height: 1),
                     if (displayCritics.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(20),
+                      Padding(
+                        padding: const EdgeInsets.all(20),
                         child: Text(
                           'No critics ranked yet',
-                          style: TextStyle(color: Colors.white38),
+                          style: TextStyle(color: colors.onSurfaceVariant),
                         ),
                       )
                     else
@@ -637,14 +631,14 @@ class _HomePageState extends State<HomePage>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.circle, color: Colors.green, size: 10),
-                  SizedBox(width: 6),
+                  const Icon(Icons.circle, color: Colors.green, size: 10),
+                  const SizedBox(width: 6),
                   Text(
                     'Found Near You',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: colors.onSurface,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'serif',
@@ -679,10 +673,10 @@ class _HomePageState extends State<HomePage>
                 ),
               );
             if (!snapshot.hasData || snapshot.data!.isEmpty)
-              return const Center(
+              return Center(
                 child: Text(
                   'No real spots found nearby',
-                  style: TextStyle(color: Colors.white38),
+                  style: TextStyle(color: colors.onSurfaceVariant),
                 ),
               );
             final data = snapshot.data!;
@@ -719,6 +713,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildSectionHeader(String emoji, String title, String subtitle) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -731,8 +726,8 @@ class _HomePageState extends State<HomePage>
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colors.onSurface,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'serif',
@@ -754,14 +749,15 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildListHeader(String title, IconData icon) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.onSurface,
               fontSize: 15,
               fontWeight: FontWeight.bold,
             ),
@@ -809,6 +805,7 @@ class _HomePageState extends State<HomePage>
     bool isLast = false,
     VoidCallback? onTap,
   }) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       children: [
         GestureDetector(
@@ -837,7 +834,7 @@ class _HomePageState extends State<HomePage>
                     height: 44,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
-                      color: Colors.white10,
+                      color: colors.surfaceContainerHighest,
                       child: const Icon(Icons.restaurant, size: 20),
                     ),
                   ),
@@ -849,8 +846,8 @@ class _HomePageState extends State<HomePage>
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -860,7 +857,7 @@ class _HomePageState extends State<HomePage>
                       Text(
                         category,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
+                          color: colors.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
@@ -873,8 +870,8 @@ class _HomePageState extends State<HomePage>
                     const SizedBox(width: 3),
                     Text(
                       rating,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.onSurface,
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                       ),
@@ -887,7 +884,7 @@ class _HomePageState extends State<HomePage>
         ),
         if (!isLast)
           Divider(
-            color: Colors.white.withValues(alpha: 0.06),
+            color: colors.outlineVariant,
             height: 1,
             indent: 16,
             endIndent: 16,
@@ -905,6 +902,7 @@ class _HomePageState extends State<HomePage>
     bool isLast = false,
     VoidCallback? onTap,
   }) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       children: [
         GestureDetector(
@@ -917,8 +915,8 @@ class _HomePageState extends State<HomePage>
                   width: 28,
                   child: Text(
                     rank,
-                    style: const TextStyle(
-                      color: Colors.white38,
+                    style: TextStyle(
+                      color: colors.onSurfaceVariant,
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
                     ),
@@ -927,15 +925,15 @@ class _HomePageState extends State<HomePage>
                 const SizedBox(width: 10),
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: Colors.white10,
+                  backgroundColor: colors.surfaceContainerHighest,
                   backgroundImage: photoUrl != null && photoUrl.isNotEmpty
                       ? NetworkImage(photoUrl)
                       : null,
                   child: (photoUrl == null || photoUrl.isEmpty)
-                      ? const Icon(
+                      ? Icon(
                           Icons.person,
                           size: 16,
-                          color: Colors.white38,
+                          color: colors.onSurfaceVariant,
                         )
                       : null,
                 ),
@@ -946,8 +944,8 @@ class _HomePageState extends State<HomePage>
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -967,7 +965,7 @@ class _HomePageState extends State<HomePage>
                 ),
                 Text(
                   points,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),
@@ -975,7 +973,7 @@ class _HomePageState extends State<HomePage>
         ),
         if (!isLast)
           Divider(
-            color: Colors.white.withValues(alpha: 0.06),
+            color: colors.outlineVariant,
             height: 1,
             indent: 16,
             endIndent: 16,
@@ -996,15 +994,16 @@ class _HomePageState extends State<HomePage>
     double? distance,
     VoidCallback? onTap,
   }) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Row(
           children: [
@@ -1016,7 +1015,7 @@ class _HomePageState extends State<HomePage>
                 height: 80,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
-                  color: Colors.white10,
+                  color: colors.surfaceContainerHighest,
                   child: const Icon(Icons.restaurant, size: 30),
                 ),
               ),
@@ -1032,8 +1031,8 @@ class _HomePageState extends State<HomePage>
                       Expanded(
                         child: Text(
                           title,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colors.onSurface,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'serif',
@@ -1056,7 +1055,7 @@ class _HomePageState extends State<HomePage>
                   Text(
                     location,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: colors.onSurfaceVariant,
                       fontSize: 12,
                     ),
                     maxLines: 1,
@@ -1076,22 +1075,22 @@ class _HomePageState extends State<HomePage>
                       Text(
                         '• $category',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: colors.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
                       if (distance != null) ...[
                         const SizedBox(width: 8),
-                        const Icon(
+                        Icon(
                           Icons.near_me,
-                          color: Colors.white38,
+                          color: colors.onSurfaceVariant,
                           size: 10,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${distance.toStringAsFixed(1)} km',
-                          style: const TextStyle(
-                            color: Colors.white38,
+                          style: TextStyle(
+                            color: colors.onSurfaceVariant,
                             fontSize: 11,
                           ),
                         ),
@@ -1105,8 +1104,8 @@ class _HomePageState extends State<HomePage>
                       const SizedBox(width: 4),
                       Text(
                         rating,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1123,6 +1122,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildDishItem({required BuildContext context, required Dish dish}) {
+    final colors = Theme.of(context).colorScheme;
     final dishRating = dish.avgRating;
     final dishReviewCount = dish.reviewCount;
 
@@ -1133,9 +1133,9 @@ class _HomePageState extends State<HomePage>
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Row(
           children: [
@@ -1147,11 +1147,11 @@ class _HomePageState extends State<HomePage>
                 height: 80,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
-                  color: Colors.white10,
-                  child: const Icon(
+                  color: colors.surfaceContainerHighest,
+                  child: Icon(
                     Icons.fastfood,
                     size: 30,
-                    color: Colors.white38,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -1167,8 +1167,8 @@ class _HomePageState extends State<HomePage>
                       Expanded(
                         child: Text(
                           dish.name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colors.onSurface,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'serif',
@@ -1191,7 +1191,7 @@ class _HomePageState extends State<HomePage>
                   Text(
                     '${dish.restaurantName ?? ''} • ${dish.restaurantAddress ?? ''}',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: colors.onSurfaceVariant,
                       fontSize: 12,
                     ),
                     maxLines: 1,
@@ -1210,7 +1210,7 @@ class _HomePageState extends State<HomePage>
                       const SizedBox(width: 4),
                       Text(
                         '• ${dish.category ?? 'Main'}',
-                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                        style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
                       ),
                       const Spacer(),
                       const Icon(
@@ -1223,8 +1223,8 @@ class _HomePageState extends State<HomePage>
                         dishRating != null && dishReviewCount > 0
                             ? '${dishRating.toStringAsFixed(1)} ($dishReviewCount)'
                             : 'No ratings yet',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),

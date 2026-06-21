@@ -16,12 +16,13 @@ class Top10Service {
         query = query.ilike('address', '%$neighbourhood%');
       }
 
+      // Sort by the master algorithm score for the leaderboard
       final response = await query
           .order('algorithm_score', ascending: false)
           .limit(limit);
       
       final results = (response as List).map((json) => Restaurant.fromSupabase(json)).toList();
-      results.sort((a, b) => b.rating.compareTo(a.rating));
+      // We keep the database order (algorithm_score) for the leaderboard
       return results;
     } catch (e) {
       return [];
@@ -81,7 +82,7 @@ class Top10Service {
           final id = j['id'].toString();
           final periodAvg = periodRatings[id]!.reduce((v, e) => v + e) / periodRatings[id]!.length;
           final modifiedJson = Map<String, dynamic>.from(j);
-          modifiedJson['algorithm_score'] = null; 
+          // For trending, we use the period average to sort
           modifiedJson['rating'] = periodAvg;
           return Restaurant.fromSupabase(modifiedJson);
         }).toList();

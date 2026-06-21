@@ -16,6 +16,7 @@ class ScoreInput {
     required this.quality,
     required this.trust,
     required this.popularity,
+
     required this.proximity,
   });
 }

@@ -165,36 +165,36 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: colors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white10),
+            border: Border.all(color: colors.outlineVariant),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.location_on, color: Color(0xFFFFD700), size: 16),
               const SizedBox(width: 4),
-              Text(_currentLocationName, style: const TextStyle(color: Colors.white, fontSize: 14)),
-              const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 16),
+              Text(_currentLocationName, style: TextStyle(color: colors.onSurface, fontSize: 14)),
+              Icon(Icons.keyboard_arrow_down, color: colors.onSurfaceVariant, size: 16),
             ],
           ),
         ),
         actions: [
           IconButton(
             onPressed: () => Navigator.pushNamed(context, '/notifications'),
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+            icon: Icon(Icons.notifications_outlined, color: colors.onSurface),
           ),
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.tune, color: Colors.white),
+            icon: Icon(Icons.tune, color: colors.onSurface),
           ),
         ],
       ),
@@ -212,13 +212,12 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                   TextField(
                     controller: _searchController,
                     onChanged: _handleSearch,
-                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Search for dishes or places...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
+                      hintStyle: TextStyle(color: colors.onSurfaceVariant),
+                      prefixIcon: Icon(Icons.search, color: colors.onSurfaceVariant),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: colors.surfaceContainerLow,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
@@ -230,12 +229,12 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'Search Results',
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: colors.onSurface, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                          icon: Icon(Icons.close, color: colors.onSurfaceVariant, size: 20),
                           onPressed: () {
                             _searchController.clear();
                             _handleSearch('');
@@ -245,7 +244,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     ),
                     const SizedBox(height: 15),
                     _searchResults.isEmpty 
-                      ? const Text('No results found', style: TextStyle(color: Colors.white54))
+                      ? Text('No results found', style: TextStyle(color: colors.onSurfaceVariant))
                       : Column(
                           children: _searchResults.map((r) => _buildRankingMiniItem(
                             '', 
@@ -271,14 +270,14 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                       ),
                     ),
                     const SizedBox(height: 30),
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.emoji_events_outlined, color: Color(0xFFFFD700), size: 24),
-                        SizedBox(width: 8),
+                        Icon(Icons.emoji_events_outlined, color: colors.primary, size: 24),
+                        const SizedBox(width: 8),
                         Text(
                           'Top 10',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: colors.onSurface,
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'serif',
@@ -288,7 +287,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     ),
                     Text(
                       "This week's best in $_currentLocationName",
-                      style: const TextStyle(color: Colors.white38, fontSize: 14),
+                      style: TextStyle(color: colors.onSurfaceVariant, fontSize: 14),
                     ),
                     const SizedBox(height: 20),
                     _buildTop10Section('Top 10 Restaurants', _top10Restaurants.asMap().entries.map((entry) {
@@ -321,10 +320,10 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'Top Ranked Near You',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: colors.onSurface,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'serif',
@@ -343,7 +342,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     SizedBox(
                       height: 200,
                       child: _topRankedNearYou.isEmpty 
-                        ? const Center(child: Text('No restaurants nearby', style: TextStyle(color: Colors.white54)))
+                        ? Center(child: Text('No restaurants nearby', style: TextStyle(color: colors.onSurfaceVariant)))
                         : ListView.builder(
                             scrollDirection: Axis.horizontal,
                             itemCount: _topRankedNearYou.length,
@@ -368,14 +367,14 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Row(
+                        Row(
                           children: [
                             Text('💰', style: TextStyle(fontSize: 18)),
                             SizedBox(width: 8),
                             Text(
                               'Best Budget Eats',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: colors.onSurface,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 fontFamily: 'serif',
@@ -384,7 +383,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                           ],
                         ),
                         const Text(
-                          'UNDER ৳ 300',
+                          'UNDER ৳ 250',
                           style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -393,7 +392,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                     SizedBox(
                       height: 220,
                       child: _budgetEats.isEmpty 
-                        ? const Center(child: Text('No budget eats found', style: TextStyle(color: Colors.white54)))
+                        ? Center(child: Text('No budget eats found', style: TextStyle(color: colors.onSurfaceVariant)))
                         : ListView.builder(
                             scrollDirection: Axis.horizontal,
                             itemCount: _budgetEats.length,
@@ -420,19 +419,23 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   }
 
   Widget _buildFilterChip(String label, {bool isSelected = false}) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: () => _applyFilter(label),
       child: Container(
         margin: const EdgeInsets.only(right: 10),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD700) : Colors.white.withOpacity(0.05),
+          color: isSelected ? colors.primary : colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? colors.primary : colors.outlineVariant,
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white,
+            color: isSelected ? colors.onPrimary : colors.onSurface,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -441,12 +444,13 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   }
 
   Widget _buildTop10Section(String title, List<Widget> items, {IconData icon = Icons.restaurant}) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Column(
         children: [
@@ -455,9 +459,9 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(color: colors.onSurface, fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              Icon(icon, color: const Color(0xFFFFD700), size: 18),
+              Icon(icon, color: colors.primary, size: 18),
             ],
           ),
           const SizedBox(height: 15),
@@ -478,6 +482,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   }
 
   Widget _buildRankingMiniItem(String rank, String title, String category, String rating, {String? imageUrl, VoidCallback? onTap}) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Padding(
@@ -485,7 +490,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
         child: Row(
           children: [
             if (rank.isNotEmpty) ...[
-              SizedBox(width: 25, child: Text(rank, style: const TextStyle(color: Colors.white54, fontSize: 12))),
+              SizedBox(width: 25, child: Text(rank, style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12))),
               const SizedBox(width: 4),
             ],
             Container(
@@ -493,7 +498,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
               height: 40,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                color: Colors.white10,
+                color: colors.surfaceContainerHighest,
                 image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover) : null,
               ),
             ),
@@ -502,8 +507,8 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text('$category • $rating ★', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(title, style: TextStyle(color: colors.onSurface, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('$category • $rating ★', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
                 ],
               ),
             ),
@@ -514,15 +519,16 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   }
 
   Widget _buildCriticMiniItem(String name, String reviews, String points, String level, {String? photoUrl}) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20, 
-            backgroundColor: Colors.white10,
+            backgroundColor: colors.surfaceContainerHighest,
             backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-            child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 16, color: Colors.white38) : null,
+            child: (photoUrl == null || photoUrl.isEmpty) ? Icon(Icons.person, size: 16, color: colors.onSurfaceVariant) : null,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -531,12 +537,12 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
               children: [
                 Row(
                   children: [
-                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(name, style: TextStyle(color: colors.onSurface, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 4),
                     const Icon(Icons.check_circle, color: Colors.green, size: 14),
                   ],
                 ),
-                Text('$reviews • $points', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                Text('$reviews • $points', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12)),
               ],
             ),
           ),
@@ -558,15 +564,16 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   }
 
   Widget _buildNearYouCard(String title, String subtitle, String rating, String badge, {String? imageUrl, VoidCallback? onTap}) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 250,
         margin: const EdgeInsets.only(right: 15),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -577,7 +584,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                   height: 120,
                   decoration: BoxDecoration(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                    color: Colors.white10,
+                    color: colors.surfaceContainerHighest,
                     image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover) : null,
                   ),
                 ),
@@ -607,17 +614,17 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      Expanded(child: Text(title, style: TextStyle(color: colors.onSurface, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
                       Row(
                         children: [
                           const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
-                          Text(rating, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          Text(rating, style: TextStyle(color: colors.onSurface, fontSize: 12)),
                         ],
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(subtitle, style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -628,15 +635,16 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
   }
 
   Widget _buildDishCard(String title, String restaurant, String price, String rating, {String? imageUrl, VoidCallback? onTap}) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 180,
         margin: const EdgeInsets.only(right: 15),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,7 +653,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
               height: 120,
               decoration: BoxDecoration(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                color: Colors.white10,
+                color: colors.surfaceContainerHighest,
                 image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover) : null,
               ),
             ),
@@ -654,8 +662,8 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(restaurant, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(title, style: TextStyle(color: colors.onSurface, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(restaurant, style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -665,7 +673,7 @@ class _DiscoveryFeedPageState extends State<DiscoveryFeedPage> {
                         children: [
                           const Icon(Icons.star, color: Color(0xFFFFD700), size: 12),
                           const SizedBox(width: 2),
-                          Text(rating, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                          Text(rating, style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11)),
                         ],
                       ),
                     ],
