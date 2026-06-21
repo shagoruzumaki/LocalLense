@@ -97,7 +97,8 @@ class RestaurantService {
 
   Future<String> getNeighbourhoodName(double lat, double lng) async {
     try {
-      final url = '$_nominatimUrl/reverse?format=jsonv2&lat=$lat&lon=$lng';
+      // Added &accept-language=en to ensure location names are returned in English
+      final url = '$_nominatimUrl/reverse?format=jsonv2&lat=$lat&lon=$lng&accept-language=en';
       final response = await http.get(Uri.parse(url), headers: {'User-Agent': 'LocalLensApp'});
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
