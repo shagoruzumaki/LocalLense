@@ -109,36 +109,36 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: colors.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
         title: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: colors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white10),
+            border: Border.all(color: colors.outlineVariant),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.location_on, color: Color(0xFFFFD700), size: 16),
               const SizedBox(width: 4),
-              Text(_currentLocationName, style: const TextStyle(color: Colors.white, fontSize: 14)),
-              const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 16),
+              Text(_currentLocationName, style: TextStyle(color: colors.onSurface, fontSize: 14)),
+              Icon(Icons.keyboard_arrow_down, color: colors.onSurfaceVariant, size: 16),
             ],
           ),
         ),
         actions: [
           IconButton(
             onPressed: _fetchDiscoveryData,
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: Icon(Icons.refresh, color: colors.onSurface),
           ),
         ],
       ),
@@ -191,16 +191,17 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
   }
 
   Widget _buildOffersSection(String title, List<RestaurantWithScore> items) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(title),
         if (items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Text(
               'No offers available at the moment',
-              style: TextStyle(color: Colors.white38, fontSize: 14, fontStyle: FontStyle.italic),
+              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic),
             ),
           )
         else
@@ -237,6 +238,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
   }
 
   Widget _buildAreaSection(String title, List<String> areas) {
+    final colors = Theme.of(context).colorScheme;
     if (areas.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,9 +253,9 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
             itemBuilder: (context, index) => Container(
               margin: const EdgeInsets.only(right: 12),
               child: ActionChip(
-                backgroundColor: Colors.white.withValues(alpha: 0.05),
-                side: const BorderSide(color: Colors.white12),
-                label: Text(areas[index], style: const TextStyle(color: Colors.white70)),
+                backgroundColor: colors.surfaceContainerLow,
+                side: BorderSide(color: colors.outlineVariant),
+                label: Text(areas[index], style: TextStyle(color: colors.onSurfaceVariant)),
                 onPressed: () {
                   Navigator.pushNamed(context, '/search', arguments: areas[index]);
                 },
@@ -267,25 +269,27 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
   }
 
   Widget _buildSectionHeader(String title) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 25, 20, 15),
       child: Text(
         title, 
-        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif')
+        style: TextStyle(color: colors.onSurface, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif')
       ),
     );
   }
 
   Widget _buildDishCard(Dish dish) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/dish-details', arguments: dish),
       child: Container(
         width: 160,
         margin: const EdgeInsets.only(right: 15),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,7 +301,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
                 height: 100, 
                 width: 160, 
                 fit: BoxFit.cover, 
-                errorBuilder: (_, __, ___) => Container(color: Colors.white10, height: 100, child: const Icon(Icons.fastfood, color: Colors.white38))
+                errorBuilder: (_, __, ___) => Container(color: colors.surfaceContainerHighest, height: 100, child: Icon(Icons.fastfood, color: colors.onSurfaceVariant))
               ),
             ),
             Padding(
@@ -305,9 +309,9 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(dish.name, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(dish.name, style: TextStyle(color: colors.onSurface, fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text(dish.restaurantName ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(dish.restaurantName ?? '', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
                   Text('৳${dish.price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
@@ -320,6 +324,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
   }
 
   Widget _buildRestaurantCard(RestaurantWithScore item) {
+    final colors = Theme.of(context).colorScheme;
     final r = item.restaurant;
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/restaurant-details', arguments: r.id),
@@ -327,9 +332,9 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
         width: 250,
         margin: const EdgeInsets.only(right: 15),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,9 +354,9 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(r.name, style: TextStyle(color: colors.onSurface, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text('${r.categoryDisplay} • ${r.address}', style: const TextStyle(color: Colors.white54, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('${r.categoryDisplay} • ${r.address}', style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -360,7 +365,7 @@ class _DiscoverPageContentState extends State<_DiscoverPageContent> {
                         children: [
                           const Icon(Icons.star, color: Color(0xFFFFD700), size: 14),
                           const SizedBox(width: 4),
-                          Text(r.rating.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          Text(r.rating.toStringAsFixed(1), style: TextStyle(color: colors.onSurface, fontSize: 12)),
                         ],
                       ),
                       Text(item.scoreLabel, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),

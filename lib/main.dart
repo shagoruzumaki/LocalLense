@@ -17,6 +17,8 @@ import 'package:local_lense/screen/restaurant_details_page.dart';
 import 'package:local_lense/screen/verification_page.dart';
 import 'package:local_lense/screen/dish_details_page.dart';
 import 'package:local_lense/model/dish.dart';
+import 'package:local_lense/theme/app_theme.dart';
+import 'package:local_lense/theme/theme_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +30,8 @@ void main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJldmdqZHh3b3p1ZXpjdW5pemhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMzODIsImV4cCI6MjA5NDQwOTM4Mn0.28rsGqn_8s0ealKroQz04tRFk8MCFvARWiOR9xDN44c',
   );
 
+  await themeController.load();
+
   runApp(const MyApp());
 }
 
@@ -36,60 +40,57 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'LocalLens',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        fontFamilyFallback: const ['ArialUnicode', 'SegoeUiEmoji'],
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFFD700),
-          brightness: Brightness.dark,
-        ),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeController,
+      builder: (context, themeMode, _) => MaterialApp(
+        title: 'LocalLens',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode,
+        home: const SplashScreen(),
+        onGenerateRoute: (settings) {
+          if (settings.name == '/restaurant-details') {
+            final restaurantId = settings.arguments as String;
+            return MaterialPageRoute(
+              builder: (context) =>
+                  RestaurantDetailsPage(restaurantId: restaurantId),
+            );
+          }
+          if (settings.name == '/dish-details') {
+            final dish = settings.arguments as Dish;
+            return MaterialPageRoute(
+              builder: (context) => DishDetailsPage(dish: dish),
+            );
+          }
+          if (settings.name == '/search') {
+            final query = settings.arguments as String?;
+            return MaterialPageRoute(
+              builder: (context) => SearchPage(initialQuery: query),
+            );
+          }
+          return null; // Let 'routes' handle other routes
+        },
+        routes: {
+          '/landing': (_) => const LandingPage(),
+          '/auth': (_) => AuthGate(
+            homeScreen: const HomePage(),
+            loginScreen: const LoginPage(),
+            resetPasswordScreen: const ResetPasswordPage(),
+          ),
+          '/login': (_) => const LoginPage(),
+          '/register': (_) => const SignupPage(),
+          '/forgot-password': (_) => const ForgotPasswordPage(),
+          '/reset-password': (_) => const ResetPasswordPage(),
+          '/discover': (_) => const DiscoverPage(),
+          // '/search' is now handled in onGenerateRoute
+          '/profile': (_) => const ProfilePage(),
+          '/ranking': (_) => const RankingPage(),
+          '/map': (_) => const MapPage(),
+          '/home': (_) => const HomePage(),
+          '/verification': (_) => const VerificationPage(),
+        },
       ),
-      home: const SplashScreen(),
-      onGenerateRoute: (settings) {
-        if (settings.name == '/restaurant-details') {
-          final restaurantId = settings.arguments as String;
-          return MaterialPageRoute(
-            builder: (context) =>
-                RestaurantDetailsPage(restaurantId: restaurantId),
-          );
-        }
-        if (settings.name == '/dish-details') {
-          final dish = settings.arguments as Dish;
-          return MaterialPageRoute(
-            builder: (context) => DishDetailsPage(dish: dish),
-          );
-        }
-        if (settings.name == '/search') {
-          final query = settings.arguments as String?;
-          return MaterialPageRoute(
-            builder: (context) => SearchPage(initialQuery: query),
-          );
-        }
-        return null; // Let 'routes' handle other routes
-      },
-      routes: {
-        '/landing': (_) => const LandingPage(),
-        '/auth': (_) => AuthGate(
-          homeScreen: const HomePage(),
-          loginScreen: const LoginPage(),
-          resetPasswordScreen: const ResetPasswordPage(),
-        ),
-        '/login': (_) => const LoginPage(),
-        '/register': (_) => const SignupPage(),
-        '/forgot-password': (_) => const ForgotPasswordPage(),
-        '/reset-password': (_) => const ResetPasswordPage(),
-        '/discover': (_) => const DiscoverPage(),
-        // '/search' is now handled in onGenerateRoute
-        '/profile': (_) => const ProfilePage(),
-        '/ranking': (_) => const RankingPage(),
-        '/map': (_) => const MapPage(),
-        '/home': (_) => const HomePage(),
-        '/verification': (_) => const VerificationPage(),
-      },
     );
   }
 }

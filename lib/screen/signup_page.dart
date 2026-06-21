@@ -13,11 +13,22 @@ class SignupPage extends StatefulWidget {
 
 class _SignupPageState extends State<SignupPage> {
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   final supabase = Supabase.instance.client;
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
   final nameController = TextEditingController();
   final authService = AuthService();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    nameController.dispose();
+    super.dispose();
+  }
 
 
   @override
@@ -71,6 +82,25 @@ class _SignupPageState extends State<SignupPage> {
                 icon: Icons.lock_outline,
                 controller: passwordController,
                 isPassword: true,
+                obscure: _obscurePassword,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+              _buildTextField(
+                label: 'Confirm Password',
+                icon: Icons.lock_outline,
+                controller: confirmPasswordController,
+                isPassword: true,
+                obscure: _obscureConfirmPassword,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                  });
+                },
               ),
               const SizedBox(height: 40),
               SizedBox(
@@ -78,6 +108,19 @@ class _SignupPageState extends State<SignupPage> {
                 height: 55,
                 child: ElevatedButton(
                   onPressed: () async {
+                    if (passwordController.text != confirmPasswordController.text) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Passwords do not match')),
+                      );
+                      return;
+                    }
+
+                    if (passwordController.text.length < 6) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password must be at least 6 characters')),
+                      );
+                      return;
+                    }
 
                     final result = await authService.register(
                       name: nameController.text,
@@ -142,10 +185,12 @@ class _SignupPageState extends State<SignupPage> {
     required IconData icon,
     required TextEditingController controller,
     bool isPassword = false,
+    bool? obscure,
+    VoidCallback? onToggleVisibility,
   }) {
     return TextField(
       controller: controller,
-      obscureText: isPassword ? _obscurePassword : false,
+      obscureText: isPassword ? (obscure ?? true) : false,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -154,14 +199,10 @@ class _SignupPageState extends State<SignupPage> {
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  (obscure ?? true) ? Icons.visibility_off : Icons.visibility,
                   color: Colors.white60,
                 ),
-                onPressed: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
+                onPressed: onToggleVisibility,
               )
             : null,
         enabledBorder: OutlineInputBorder(
